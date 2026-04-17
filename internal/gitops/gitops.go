@@ -1,12 +1,10 @@
 package gitops
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -19,13 +17,13 @@ const fetchTimeout = 15 * time.Second
 type InProgressOp string
 
 const (
-	OpNone        InProgressOp = ""
-	OpMerging     InProgressOp = "MERGING"
-	OpRebasing    InProgressOp = "REBASING"
-	OpCherryPick  InProgressOp = "CHERRY-PICK"
-	OpReverting   InProgressOp = "REVERTING"
-	OpBisecting   InProgressOp = "BISECTING"
-	OpAMSession   InProgressOp = "APPLYING"
+	OpNone       InProgressOp = ""
+	OpMerging    InProgressOp = "MERGING"
+	OpRebasing   InProgressOp = "REBASING"
+	OpCherryPick InProgressOp = "CHERRY-PICK"
+	OpReverting  InProgressOp = "REVERTING"
+	OpBisecting  InProgressOp = "BISECTING"
+	OpAMSession  InProgressOp = "APPLYING"
 )
 
 type Status struct {
@@ -69,25 +67,17 @@ func (s Status) SafeToUpdate() bool {
 	return s.MergedInDefault
 }
 
-func run(dir string, args ...string) (string, string, error) {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	return strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String()), err
-}
+func DefaultBranch(dir string) string { return defaultBranch(defaultRunner, dir) }
 
-func DefaultBranch(dir string) string {
-	out, _, err := run(dir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+func defaultBranch(r GitRunner, dir string) string {
+	out, _, err := r.Run(dir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
 	if err == nil && out != "" {
 		if _, rest, ok := strings.Cut(out, "/"); ok {
 			return rest
 		}
 	}
-	if _, _, err := run(dir, "remote", "set-head", "origin", "--auto"); err == nil {
-		out, _, err := run(dir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+	if _, _, err := r.Run(dir, "remote", "set-head", "origin", "--auto"); err == nil {
+		out, _, err := r.Run(dir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
 		if err == nil && out != "" {
 			if _, rest, ok := strings.Cut(out, "/"); ok {
 				return rest
@@ -97,39 +87,40 @@ func DefaultBranch(dir string) string {
 	return "main"
 }
 
-func Fetch(dir string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+func Fetch(dir string) error { return fetch(defaultRunner, dir) }
+
+func fetch(r GitRunner, dir string) error {
+	return fetchWith(r, dir, fetchTimeout)
+}
+
+func fetchWith(r GitRunner, dir string, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "fetch", "--quiet", "--prune", "origin")
-	cmd.Dir = dir
-	// Prevent hanging on interactive auth prompts from dead SSH remotes.
-	cmd.Env = append(os.Environ(),
+	env := []string{
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_ASKPASS=/bin/true",
 		"SSH_ASKPASS=/bin/true",
 		"GCM_INTERACTIVE=Never",
-	)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
+	}
+	_, stderr, err := r.RunCtx(ctx, dir, env, "fetch", "--quiet", "--prune", "origin")
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		applog.Errorf("git.fetch", dir, "timed out after %s; stderr=%s", fetchTimeout, strings.TrimSpace(stderr.String()))
-		return fmt.Errorf("fetch timed out (%s)", fetchTimeout)
+		applog.Errorf("git.fetch", dir, "timed out after %s; stderr=%s", timeout, stderr)
+		return fmt.Errorf("fetch timed out (%s)", timeout)
 	}
 	if err != nil {
-		applog.Errorf("git.fetch", dir, "%v; stderr=%s", err, strings.TrimSpace(stderr.String()))
-		return fmt.Errorf("%s: %w", strings.TrimSpace(stderr.String()), err)
+		applog.Errorf("git.fetch", dir, "%v; stderr=%s", err, stderr)
+		return fmt.Errorf("%s: %w", stderr, err)
 	}
 	return nil
 }
 
-func GetStatus(dir string) (Status, error) {
-	s := Status{DefaultBranch: DefaultBranch(dir)}
+func GetStatus(dir string) (Status, error) { return getStatus(defaultRunner, dir) }
 
-	out, _, err := run(dir, "status", "--porcelain=v2", "--branch", "--untracked-files=normal")
+func getStatus(r GitRunner, dir string) (Status, error) {
+	s := Status{DefaultBranch: defaultBranch(r, dir)}
+
+	out, _, err := r.Run(dir, "status", "--porcelain=v2", "--branch", "--untracked-files=normal")
 	if err != nil {
 		return s, fmt.Errorf("git status: %w", err)
 	}
@@ -140,15 +131,15 @@ func GetStatus(dir string) (Status, error) {
 	// If upstream missing but we know default branch, compare to origin/<default>.
 	if s.Upstream == "" && !s.Detached {
 		target := "origin/" + s.DefaultBranch
-		if ab, _, err := run(dir, "rev-list", "--left-right", "--count", "HEAD..."+target); err == nil {
+		if ab, _, err := r.Run(dir, "rev-list", "--left-right", "--count", "HEAD..."+target); err == nil {
 			var a, b int
 			fmt.Sscanf(ab, "%d\t%d", &a, &b)
 			s.Ahead, s.Behind = a, b
 		}
 	}
 
-	s.Stashes = stashCount(dir)
-	s.InProgress = detectOp(dir)
+	s.Stashes = stashCount(r, dir)
+	s.InProgress = detectOp(r, dir)
 
 	s.CanFF = !s.Detached && s.BranchIsDefault && !s.Dirty() && s.Behind > 0 && s.Ahead == 0
 
@@ -157,7 +148,7 @@ func GetStatus(dir string) (Status, error) {
 	// upstream-present commits with "- <sha>" and missing ones with "+ <sha>".
 	if !s.Detached && !s.BranchIsDefault {
 		target := "origin/" + s.DefaultBranch
-		if out, _, err := run(dir, "cherry", target, "HEAD"); err == nil {
+		if out, _, err := r.Run(dir, "cherry", target, "HEAD"); err == nil {
 			merged := true
 			for _, line := range strings.Split(out, "\n") {
 				if strings.HasPrefix(line, "+ ") {
@@ -175,27 +166,29 @@ func GetStatus(dir string) (Status, error) {
 // SwitchAndFF checks out the default branch (creating a tracking branch if
 // needed) and fast-forwards it to origin/<default>. Refuses to run on a
 // dirty working tree so the switch can't silently clobber user edits.
-func SwitchAndFF(dir string) error {
-	def := DefaultBranch(dir)
+func SwitchAndFF(dir string) error { return switchAndFF(defaultRunner, dir) }
 
-	out, _, _ := run(dir, "status", "--porcelain")
+func switchAndFF(r GitRunner, dir string) error {
+	def := defaultBranch(r, dir)
+
+	out, _, _ := r.Run(dir, "status", "--porcelain")
 	if len(out) > 0 {
 		return fmt.Errorf("working tree dirty")
 	}
 
 	// Local <default> may not exist (user never checked it out). In that
 	// case create a tracking branch from origin/<default>.
-	if _, _, err := run(dir, "show-ref", "--verify", "--quiet", "refs/heads/"+def); err != nil {
-		if _, stderr, err := run(dir, "checkout", "-b", def, "--track", "origin/"+def); err != nil {
+	if _, _, err := r.Run(dir, "show-ref", "--verify", "--quiet", "refs/heads/"+def); err != nil {
+		if _, stderr, err := r.Run(dir, "checkout", "-b", def, "--track", "origin/"+def); err != nil {
 			return fmt.Errorf("create local %s: %s: %w", def, strings.TrimSpace(stderr), err)
 		}
 	} else {
-		if _, stderr, err := run(dir, "checkout", def); err != nil {
+		if _, stderr, err := r.Run(dir, "checkout", def); err != nil {
 			return fmt.Errorf("checkout %s: %s: %w", def, strings.TrimSpace(stderr), err)
 		}
 	}
 
-	if _, stderr, err := run(dir, "merge", "--ff-only", "origin/"+def); err != nil {
+	if _, stderr, err := r.Run(dir, "merge", "--ff-only", "origin/"+def); err != nil {
 		return fmt.Errorf("ff %s: %s: %w", def, strings.TrimSpace(stderr), err)
 	}
 	return nil
@@ -242,16 +235,16 @@ func parsePorcelainV2(out string, s *Status) {
 	}
 }
 
-func stashCount(dir string) int {
-	out, _, err := run(dir, "stash", "list", "--format=%gd")
+func stashCount(r GitRunner, dir string) int {
+	out, _, err := r.Run(dir, "stash", "list", "--format=%gd")
 	if err != nil || out == "" {
 		return 0
 	}
 	return len(strings.Split(out, "\n"))
 }
 
-func detectOp(dir string) InProgressOp {
-	gitDir, _, err := run(dir, "rev-parse", "--git-dir")
+func detectOp(r GitRunner, dir string) InProgressOp {
+	gitDir, _, err := r.Run(dir, "rev-parse", "--git-dir")
 	if err != nil {
 		return OpNone
 	}
@@ -280,16 +273,18 @@ func detectOp(dir string) InProgressOp {
 	return OpNone
 }
 
-func FastForward(dir string) error {
-	def := DefaultBranch(dir)
-	branch, _, err := run(dir, "rev-parse", "--abbrev-ref", "HEAD")
+func FastForward(dir string) error { return fastForward(defaultRunner, dir) }
+
+func fastForward(r GitRunner, dir string) error {
+	def := defaultBranch(r, dir)
+	branch, _, err := r.Run(dir, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return fmt.Errorf("rev-parse: %w", err)
 	}
 	if branch != def {
 		return fmt.Errorf("on branch %q, not %q", branch, def)
 	}
-	_, stderr, err := run(dir, "merge", "--ff-only", "origin/"+def)
+	_, stderr, err := r.Run(dir, "merge", "--ff-only", "origin/"+def)
 	if err != nil {
 		applog.Errorf("git.ff", dir, "%v; stderr=%s", err, stderr)
 		return fmt.Errorf("%s: %w", stderr, err)
@@ -321,10 +316,12 @@ type StashEntry struct {
 	Age     string // relative
 }
 
-func GetDetails(dir string) (Details, error) {
+func GetDetails(dir string) (Details, error) { return getDetails(defaultRunner, dir) }
+
+func getDetails(r GitRunner, dir string) (Details, error) {
 	d := Details{}
 
-	if out, _, err := run(dir, "log", "-1", "--pretty=format:%h\t%s\t%an\t%ar"); err == nil && out != "" {
+	if out, _, err := r.Run(dir, "log", "-1", "--pretty=format:%h\t%s\t%an\t%ar"); err == nil && out != "" {
 		parts := strings.SplitN(out, "\t", 4)
 		if len(parts) == 4 {
 			d.LastCommitSHA = parts[0]
@@ -334,7 +331,7 @@ func GetDetails(dir string) (Details, error) {
 		}
 	}
 
-	if out, _, err := run(dir, "status", "--porcelain=v1"); err == nil && out != "" {
+	if out, _, err := r.Run(dir, "status", "--porcelain=v1"); err == nil && out != "" {
 		for _, line := range strings.Split(out, "\n") {
 			if len(line) < 3 {
 				continue
@@ -346,7 +343,7 @@ func GetDetails(dir string) (Details, error) {
 		}
 	}
 
-	if out, _, err := run(dir, "stash", "list", "--format=%gd\t%gs\t%cr"); err == nil && out != "" {
+	if out, _, err := r.Run(dir, "stash", "list", "--format=%gd\t%gs\t%cr"); err == nil && out != "" {
 		for _, line := range strings.Split(out, "\n") {
 			parts := strings.SplitN(line, "\t", 3)
 			if len(parts) == 3 {
@@ -359,24 +356,24 @@ func GetDetails(dir string) (Details, error) {
 		}
 	}
 
-	if out, _, err := run(dir, "rev-parse", "--abbrev-ref", "@{upstream}"); err == nil {
+	if out, _, err := r.Run(dir, "rev-parse", "--abbrev-ref", "@{upstream}"); err == nil {
 		d.UpstreamBranch = out
 	}
-	if out, _, err := run(dir, "remote", "get-url", "origin"); err == nil {
+	if out, _, err := r.Run(dir, "remote", "get-url", "origin"); err == nil {
 		d.RemoteURL = out
 	}
 
 	return d, nil
 }
 
-func Clone(sshURL, dest string) error {
-	cmd := exec.Command("git", "clone", sshURL, dest)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		applog.Errorf("git.clone", dest, "%v; stderr=%s", err, strings.TrimSpace(stderr.String()))
-		return fmt.Errorf("%s: %w", strings.TrimSpace(stderr.String()), err)
+func Clone(sshURL, dest string) error { return clone(defaultRunner, sshURL, dest) }
+
+func clone(r GitRunner, sshURL, dest string) error {
+	_, stderr, err := r.RunCtx(context.Background(), "", nil, "clone", sshURL, dest)
+	if err != nil {
+		applog.Errorf("git.clone", dest, "%v; stderr=%s", err, stderr)
+		return fmt.Errorf("%s: %w", stderr, err)
 	}
 	return nil
 }
+
