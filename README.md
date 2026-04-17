@@ -55,17 +55,17 @@ optiprime-sync
 
 **Local tab**
 
-| Key               | Action                                                        |
-| ----------------- | ------------------------------------------------------------- |
-| `j`/`k` or arrows | move cursor                                                   |
-| `space`           | toggle selection                                              |
-| `a`               | select all ff-ready (on default branch, clean, behind)        |
-| `n`               | deselect all                                                  |
-| `u`               | fast-forward every selected repo to `origin/<default>`        |
-| `l`               | launch `lazygit` inside the hovered repo (re-fetches on exit) |
-| `tab`             | switch to Remote                                              |
-| `r`               | rescan + re-fetch                                             |
-| `q`               | quit                                                          |
+| Key               | Action                                                                                                                                                    |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `j`/`k` or arrows | move cursor                                                                                                                                               |
+| `space`           | toggle selection                                                                                                                                          |
+| `a`               | select every repo that is safe to update in one keystroke                                                                                                 |
+| `n`               | deselect all                                                                                                                                              |
+| `u`               | update every selected repo: fast-forward on the default branch, or switch to default and ff when a feature branch's work is already in `origin/<default>` |
+| `l`               | launch `lazygit` inside the hovered repo (re-fetches on exit)                                                                                             |
+| `tab`             | switch to Remote                                                                                                                                          |
+| `r`               | rescan + re-fetch                                                                                                                                         |
+| `q`               | quit                                                                                                                                                      |
 
 ### Status glyphs
 
@@ -78,6 +78,22 @@ optiprime-sync
 | `?N`        | untracked files                                                            |
 | `⚑N`        | stash entries                                                              |
 | `[MERGING]` | in-progress `merge`, `rebase`, `cherry-pick`, `revert`, `bisect`, or `am`  |
+| `[N PR]`    | `N` open PRs authored by the signed-in user on this repo                   |
+
+### State column
+
+| state                   | meaning                                                                          |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `ff-ready`              | on default branch, clean, and behind - one keystroke to fast-forward             |
+| `merged → switch & ff`  | on a feature branch whose work is already in `origin/<default>` - safe to switch |
+| `merged (dirty)`        | work is merged upstream but the tree is dirty, so the switch is not offered      |
+| `up-to-date`            | at the tip of upstream / default                                                 |
+| `diverged`              | local has commits upstream doesn't and vice versa                                |
+| `ahead`                 | local has commits not in upstream                                                |
+| `behind (other branch)` | on a non-default branch; default is behind but your branch is independent        |
+| `behind (dirty)`        | default is behind but the tree is dirty, so ff is refused                        |
+| `archived upstream`     | repo exists locally and in ADO but ADO marked it disabled                        |
+| `not in ADO`            | local folder has no matching ADO repo (renamed or deleted upstream)              |
 
 **Remote tab**
 

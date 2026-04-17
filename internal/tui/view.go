@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/pszypowicz/optiprime-sync/internal/applog"
 	"github.com/pszypowicz/optiprime-sync/internal/gitops"
 )
 
@@ -23,15 +24,25 @@ func (m model) View() string {
 	b.WriteString(m.renderTabs())
 	b.WriteString("\n\n")
 
+	var listPart string
 	if m.tab == tabLocal {
-		b.WriteString(m.renderLocal())
+		listPart = m.renderLocal()
+		if m.detailsOpen {
+			listPart = composeOverlay(listPart, m.renderDetailsOverlay(), m.innerWidth())
+		}
 	} else {
-		b.WriteString(m.renderRemote())
+		listPart = m.renderRemote()
 	}
+	b.WriteString(listPart)
 
 	b.WriteString("\n\n")
 	b.WriteString(m.renderFooter())
-	return boxStyle.Render(b.String())
+	// Explicit width/height so the border hugs the terminal, not the widest
+	// line. -2 accounts for the left+right / top+bottom border glyphs.
+	return boxStyle.
+		Width(m.width - 2).
+		Height(m.height - 2).
+		Render(b.String())
 }
 
 func (m model) innerWidth() int {
@@ -63,6 +74,9 @@ func (m model) renderHeader() string {
 	if m.prErr != "" {
 		extras = append(extras, warnStyle.Render("PRs: "+m.prErr))
 	}
+	if m.prErr != "" || m.remoteListErr != "" || m.scanErr != "" {
+		extras = append(extras, mutedStyle.Render("log: "+applog.Path()))
+	}
 	if len(extras) > 0 {
 		head += "   " + strings.Join(extras, "   ")
 	}
@@ -73,10 +87,38 @@ func (m model) renderHeader() string {
 func (m model) renderTabs() string {
 	local := fmt.Sprintf("Local (%d)", len(m.locals))
 	remote := fmt.Sprintf("Remote (%d)", len(m.remotes))
+	var tabs string
 	if m.tab == tabLocal {
-		return tabActive.Render(local) + " " + tabInactive.Render(remote)
+		tabs = tabActive.Render(local) + " " + tabInactive.Render(remote)
+	} else {
+		tabs = tabInactive.Render(local) + " " + tabActive.Render(remote)
 	}
-	return tabInactive.Render(local) + " " + tabActive.Render(remote)
+	if r := m.scrollRangeText(); r != "" {
+		tabs += "   " + mutedStyle.Render(r)
+	}
+	return tabs
+}
+
+// scrollRangeText returns "(start-end of total)" when the viewport can't show
+// the whole list, otherwise "".
+func (m model) scrollRangeText() string {
+	var n, start int
+	if m.tab == tabLocal {
+		n = len(m.locals)
+		start = m.localScroll
+	} else {
+		n = len(m.remotes)
+		start = m.remoteScroll
+	}
+	vh := m.viewportHeight()
+	if n == 0 || n <= vh {
+		return ""
+	}
+	end := start + vh
+	if end > n {
+		end = n
+	}
+	return fmt.Sprintf("(%d-%d of %d)", start+1, end, n)
 }
 
 func (m model) renderLocal() string {
@@ -105,18 +147,31 @@ func (m model) renderLocal() string {
 	widths := measureLocalWidths(m.locals[start:end], remoteMap)
 	L := computeLayout(m.width, widths)
 
-	rows := []string{m.renderLocalHeader(L, n, start, end)}
+	rows := []string{m.renderLocalHeader(L)}
 	for i := start; i < end; i++ {
 		rows = append(rows, m.renderLocalRow(i, L, remoteMap))
 	}
-	for len(rows) < vh+1 {
-		rows = append(rows, "")
+	// Pad any trailing empty viewport rows with full-width zebra stripes so
+	// the striping pattern stays intact below the last real row.
+	for padIdx := 0; len(rows) < vh+1; padIdx++ {
+		virtualIdx := end + padIdx
+		rows = append(rows, m.emptyStripedRow(virtualIdx))
 	}
 	return strings.Join(rows, "\n")
 }
 
-func (m model) renderLocalHeader(L layout, total, start, end int) string {
-	hdr := mutedStyle.Render(
+// emptyStripedRow returns a blank row padded to the inner content width. Odd
+// rows carry the zebra bg so empty space continues the alternating pattern.
+func (m model) emptyStripedRow(virtualIdx int) string {
+	blank := strings.Repeat(" ", m.innerWidth())
+	if virtualIdx%2 == 1 {
+		return applyRowBg(blank, zebraStyle)
+	}
+	return blank
+}
+
+func (m model) renderLocalHeader(L layout) string {
+	return tableHeaderStyle.Render(
 		cell(colCursorW, "") +
 			cell(colCheckW, "") +
 			cell(L.name, "repo") +
@@ -124,10 +179,6 @@ func (m model) renderLocalHeader(L layout, total, start, end int) string {
 			cell(L.glyph, "status") +
 			cell(L.state, "state"),
 	)
-	if total > (end - start) {
-		hdr += "   " + mutedStyle.Render(fmt.Sprintf("(%d-%d of %d)", start+1, end, total))
-	}
-	return hdr
 }
 
 func (m model) renderLocalRow(i int, L layout, remoteMap map[string]*remoteItem) string {
@@ -164,10 +215,14 @@ func (m model) renderLocalRow(i int, L layout, remoteMap map[string]*remoteItem)
 		cell(L.glyph, glyphCell) +
 		cell(L.state, stateCell)
 
-	if i == m.localCursor {
-		return rowSelected.Render(row)
+	switch {
+	case i == m.localCursor:
+		return applyRowBg(row, rowSelected)
+	case i%2 == 1:
+		return applyRowBg(row, zebraStyle)
+	default:
+		return row
 	}
-	return row
 }
 
 func (m model) renderRemote() string {
@@ -197,23 +252,21 @@ func (m model) renderRemote() string {
 		sshW = 20
 	}
 
-	hdr := mutedStyle.Render(
+	hdr := tableHeaderStyle.Render(
 		cell(colCursorW, "") +
 			cell(colCheckW, "") +
 			cell(L.name, "repo") +
 			cell(L.branch, "state") +
 			cell(sshW, "ssh"),
 	)
-	if n > (end - start) {
-		hdr += "   " + mutedStyle.Render(fmt.Sprintf("(%d-%d of %d)", start+1, end, n))
-	}
 
 	rows := []string{hdr}
 	for i := start; i < end; i++ {
 		rows = append(rows, m.renderRemoteRow(i, L, sshW))
 	}
-	for len(rows) < vh+1 {
-		rows = append(rows, "")
+	for padIdx := 0; len(rows) < vh+1; padIdx++ {
+		virtualIdx := end + padIdx
+		rows = append(rows, m.emptyStripedRow(virtualIdx))
 	}
 	return strings.Join(rows, "\n")
 }
@@ -251,16 +304,162 @@ func (m model) renderRemoteRow(i int, L layout, sshW int) string {
 		cell(L.branch, state) +
 		cell(sshW, mutedStyle.Render(it.Repo.SSHURL))
 
-	if i == m.remoteCursor {
-		return rowSelected.Render(row)
+	switch {
+	case i == m.remoteCursor:
+		return applyRowBg(row, rowSelected)
+	case i%2 == 1:
+		return applyRowBg(row, zebraStyle)
+	default:
+		return row
 	}
-	return row
+}
+
+func (m model) renderDetailsOverlay() string {
+	if len(m.locals) == 0 || m.localCursor < 0 || m.localCursor >= len(m.locals) {
+		return ""
+	}
+	it := m.locals[m.localCursor]
+
+	var d *gitops.Details
+	if m.detailsCache != nil {
+		d = m.detailsCache[it.Name]
+	}
+
+	title := tableHeaderStyle.Render(fmt.Sprintf("Details · %s", it.Name))
+	hint := mutedStyle.Render("[esc/i] close")
+
+	lines := []string{title + "    " + hint, ""}
+
+	if d == nil {
+		lines = append(lines, mutedStyle.Render(m.spinner.View()+" loading..."))
+		return overlayStyle.Render(strings.Join(lines, "\n"))
+	}
+
+	s := it.Status
+	branchLine := s.Branch
+	if s.Upstream != "" {
+		branchLine += mutedStyle.Render(" → ") + s.Upstream
+	}
+	if !s.BranchIsDefault {
+		branchLine += mutedStyle.Render(fmt.Sprintf("   (default: %s)", s.DefaultBranch))
+	}
+	lines = append(lines, field("Branch", branchLine))
+
+	if d.LastCommitSHA != "" {
+		commit := fmt.Sprintf("%s  %s  %s(%s, %s)",
+			okStyle.Render(d.LastCommitSHA),
+			d.LastCommitSubject,
+			mutedStyle.Render(""),
+			d.LastCommitAge,
+			d.LastCommitAuthor,
+		)
+		lines = append(lines, field("Commit", commit))
+	}
+
+	if len(d.DirtyFiles) > 0 {
+		first := d.DirtyFiles[0]
+		lines = append(lines, field("Dirty", fmt.Sprintf("%s %s", warnStyle.Render(first.XY), first.Path)))
+		more := len(d.DirtyFiles) - 1
+		max := 3
+		if more < max {
+			max = more
+		}
+		for i := 1; i <= max; i++ {
+			f := d.DirtyFiles[i]
+			lines = append(lines, field("", fmt.Sprintf("%s %s", warnStyle.Render(f.XY), f.Path)))
+		}
+		if more > 3 {
+			lines = append(lines, field("", mutedStyle.Render(fmt.Sprintf("+%d more", more-3))))
+		}
+	}
+
+	if len(d.Stashes) > 0 {
+		first := d.Stashes[0]
+		line := fmt.Sprintf("%s  %s  %s", mutedStyle.Render(first.Ref), first.Subject, mutedStyle.Render("("+first.Age+")"))
+		lines = append(lines, field("Stash", line))
+		if extra := len(d.Stashes) - 1; extra > 0 {
+			lines = append(lines, field("", mutedStyle.Render(fmt.Sprintf("+%d more", extra))))
+		}
+	}
+
+	var sshURL, webURL string
+	if rm := m.remoteByName(); len(rm) > 0 {
+		if r, ok := rm[it.Name]; ok {
+			sshURL = r.Repo.SSHURL
+			webURL = r.Repo.WebURL
+		}
+	}
+	if sshURL == "" {
+		sshURL = d.RemoteURL
+	}
+	if sshURL != "" {
+		lines = append(lines, field("SSH", mutedStyle.Render(sshURL)))
+	}
+	if webURL != "" {
+		lines = append(lines, field("Web", mutedStyle.Render(webURL)))
+	}
+
+	return overlayStyle.Render(strings.Join(lines, "\n"))
+}
+
+// composeOverlay splices a small pre-rendered overlay into the center of
+// listPart. Each row the overlay covers is replaced by left-pad + overlay
+// row + right-pad (padded with plain spaces), so the overlay's own bg is
+// what the user sees while the list underneath is hidden.
+func composeOverlay(list, overlay string, innerWidth int) string {
+	listLines := strings.Split(list, "\n")
+	overlayLines := strings.Split(overlay, "\n")
+	if len(overlayLines) == 0 {
+		return list
+	}
+
+	overlayW := 0
+	for _, l := range overlayLines {
+		if w := lipgloss.Width(l); w > overlayW {
+			overlayW = w
+		}
+	}
+	if overlayW > innerWidth {
+		overlayW = innerWidth
+	}
+
+	startY := (len(listLines) - len(overlayLines)) / 2
+	if startY < 0 {
+		startY = 0
+	}
+	padLeft := (innerWidth - overlayW) / 2
+	if padLeft < 0 {
+		padLeft = 0
+	}
+	padLeftStr := strings.Repeat(" ", padLeft)
+
+	for i, ol := range overlayLines {
+		y := startY + i
+		if y < 0 || y >= len(listLines) {
+			continue
+		}
+		olW := lipgloss.Width(ol)
+		padRight := innerWidth - padLeft - olW
+		if padRight < 0 {
+			padRight = 0
+		}
+		listLines[y] = padLeftStr + ol + strings.Repeat(" ", padRight)
+	}
+	return strings.Join(listLines, "\n")
+}
+
+// field formats one labeled line of the details panel.
+func field(label, value string) string {
+	if label == "" {
+		return "           " + value
+	}
+	return mutedStyle.Render(fmt.Sprintf("%-10s", label)) + " " + value
 }
 
 func (m model) renderFooter() string {
 	var keys string
 	if m.tab == tabLocal {
-		keys = "[space] toggle  [a] ff-ready  [n] none  [u] update  [l] lazygit  [tab] remote  [r] refresh  [q] quit"
+		keys = "[space] toggle  [a] ff-ready  [n] none  [u] update  [i] info  [l] lazygit  [tab] remote  [r] refresh  [q] quit"
 	} else {
 		keys = "[enter] clone via SSH  [tab] local  [r] refresh  [q] quit"
 	}
@@ -356,6 +555,35 @@ func (m model) remoteByName() map[string]*remoteItem {
 	return out
 }
 
+// applyRowBg wraps a row in the given style's ANSI codes and re-applies them
+// after every inner "\x1b[0m" reset so the full row width carries the
+// background. lipgloss's default cell rendering emits a full reset after each
+// styled substring, which otherwise breaks an outer background partway across
+// the row.
+func applyRowBg(row string, style lipgloss.Style) string {
+	prefix := styleOpenSequence(style)
+	if prefix == "" {
+		return row
+	}
+	// Re-open the style immediately after every inner reset so the bg (and
+	// any bold) stays active across the whole row.
+	row = strings.ReplaceAll(row, "\x1b[0m", "\x1b[0m"+prefix)
+	return prefix + row + "\x1b[0m"
+}
+
+// styleOpenSequence renders a probe character through the given style and
+// extracts the opening ANSI escape sequence (everything before the probe).
+// Runs the real renderer so adaptive colors resolve to the terminal's actual
+// palette codes.
+func styleOpenSequence(style lipgloss.Style) string {
+	const probe = "\x00"
+	out := style.Render(probe)
+	if idx := strings.Index(out, probe); idx > 0 {
+		return out[:idx]
+	}
+	return ""
+}
+
 // cell sanitizes content (collapses newlines/tabs so multi-line errors
 // can't break the grid), truncates ANSI-aware to width-1, then pads to exact
 // visible width. The -1 guarantees at least one trailing space, so a cell
@@ -365,12 +593,18 @@ func cell(width int, content string) string {
 		return ""
 	}
 	content = sanitizeInline(content)
-	budget := width - 1
-	if budget < 1 {
-		budget = width
+	// Only truncate when the content is actually wider than the cell.
+	// Otherwise (including the exact-fit case, which is normal for narrow
+	// cells like the 2-wide cursor column) keep the content verbatim and let
+	// lipgloss pad to width with plain spaces.
+	if lipgloss.Width(content) > width {
+		budget := width - 1
+		if budget < 1 {
+			budget = width
+		}
+		content = ansi.Truncate(content, budget, "…")
 	}
-	truncated := ansi.Truncate(content, budget, "…")
-	return lipgloss.NewStyle().Width(width).Render(truncated)
+	return lipgloss.NewStyle().Width(width).Render(content)
 }
 
 func sanitizeInline(s string) string {
@@ -446,6 +680,10 @@ func renderState(s gitops.Status) string {
 	switch {
 	case s.CanFF:
 		return okStyle.Render("ff-ready")
+	case !s.BranchIsDefault && s.MergedInDefault && !s.Dirty():
+		return okStyle.Render("merged → switch & ff")
+	case !s.BranchIsDefault && s.MergedInDefault:
+		return warnStyle.Render("merged (dirty)")
 	case s.Ahead == 0 && s.Behind == 0:
 		return okStyle.Render("up-to-date")
 	case s.Ahead > 0 && s.Behind > 0:

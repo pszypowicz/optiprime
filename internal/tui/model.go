@@ -57,6 +57,11 @@ type model struct {
 	loadingPRs     bool
 	fetchesStarted bool
 	flash          string // top-of-screen status line
+
+	// Details panel (toggled with `i` on the Local tab).
+	detailsOpen    bool
+	detailsCache   map[string]*gitops.Details
+	detailsLoading map[string]bool
 }
 
 func newModel(cfg *config.Config) model {

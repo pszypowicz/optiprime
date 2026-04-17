@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/pszypowicz/optiprime-sync/internal/applog"
 )
 
 const (
@@ -64,7 +66,11 @@ func (c *Client) get(ctx context.Context, orgPath string, q url.Values, out any)
 	if q == nil {
 		q = url.Values{}
 	}
-	q.Set("api-version", apiVersion)
+	// Default to the GA api-version but let specific endpoints override
+	// (e.g. connectionData is only available as a preview resource).
+	if q.Get("api-version") == "" {
+		q.Set("api-version", apiVersion)
+	}
 
 	u := c.BaseURL + orgPath + "?" + q.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
@@ -76,6 +82,7 @@ func (c *Client) get(ctx context.Context, orgPath string, q url.Values, out any)
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
+		applog.Errorf("ado.request", u, "transport error: %v", err)
 		return fmt.Errorf("ado request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -86,10 +93,13 @@ func (c *Client) get(ctx context.Context, orgPath string, q url.Values, out any)
 	case http.StatusOK:
 		// proceed
 	case http.StatusUnauthorized, http.StatusNonAuthoritativeInfo:
+		applog.Errorf("ado.request", u, "auth failed HTTP %d body=%s", resp.StatusCode, string(body))
 		return fmt.Errorf("ado auth failed (%d) - check AZURE_DEVOPS_EXT_PAT scope/expiry", resp.StatusCode)
 	case http.StatusNotFound:
+		applog.Errorf("ado.request", u, "404 body=%s", string(body))
 		return fmt.Errorf("ado path %q returned 404 - check ADO_ORG/ADO_PROJECT", orgPath)
 	default:
+		applog.Errorf("ado.request", u, "HTTP %d body=%s", resp.StatusCode, string(body))
 		snippet := strings.TrimSpace(string(body))
 		if len(snippet) > 200 {
 			snippet = snippet[:200] + "..."
@@ -127,8 +137,12 @@ type connectionData struct {
 }
 
 func (c *Client) AuthUserID(ctx context.Context) (string, error) {
+	// connectionData is a preview-only resource; GA api-version gets rejected.
+	q := url.Values{}
+	q.Set("api-version", "7.1-preview.1")
+
 	var cd connectionData
-	if err := c.get(ctx, "/_apis/connectionData", nil, &cd); err != nil {
+	if err := c.get(ctx, "/_apis/connectionData", q, &cd); err != nil {
 		return "", err
 	}
 	if cd.AuthenticatedUser.ID == "" {
@@ -146,10 +160,12 @@ type pullRequestsResponse struct {
 }
 
 func (c *Client) MyOpenPRs(ctx context.Context, userID string) (map[string]int, error) {
+	// No $top: url.Values.Encode() percent-encodes the $ to %24, which ADO's
+	// ASP request-path validator misreports as a "potentially dangerous"
+	// colon. Default pagination is enough for one user's open PRs.
 	q := url.Values{}
 	q.Set("searchCriteria.creatorId", userID)
 	q.Set("searchCriteria.status", "active")
-	q.Set("$top", "1000")
 
 	path := "/" + url.PathEscape(c.Project) + "/_apis/git/pullrequests"
 	var resp pullRequestsResponse

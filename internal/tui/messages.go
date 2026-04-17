@@ -45,3 +45,9 @@ type lazygitDoneMsg struct {
 	path string
 	err  error
 }
+
+type detailsMsg struct {
+	name    string
+	details gitops.Details
+	err     error
+}

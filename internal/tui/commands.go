@@ -101,6 +101,34 @@ func ffCmd(name, path string) tea.Cmd {
 	}
 }
 
+// switchAndFFCmd checks out the default branch and fast-forwards it.
+// Used for repos whose feature branch work is already in origin/<default>.
+func switchAndFFCmd(name, path string) tea.Cmd {
+	return func() tea.Msg {
+		sem <- struct{}{}
+		defer func() { <-sem }()
+
+		if err := gitops.SwitchAndFF(path); err != nil {
+			return ffDoneMsg{name: name, err: err}
+		}
+		st, err := gitops.GetStatus(path)
+		if err != nil {
+			return ffDoneMsg{name: name, err: err}
+		}
+		return ffDoneMsg{name: name, status: st}
+	}
+}
+
+func fetchDetailsCmd(name, path string) tea.Cmd {
+	return func() tea.Msg {
+		sem <- struct{}{}
+		defer func() { <-sem }()
+
+		d, err := gitops.GetDetails(path)
+		return detailsMsg{name: name, details: d, err: err}
+	}
+}
+
 func cloneCmd(name, sshURL, dest string) tea.Cmd {
 	return func() tea.Msg {
 		sem <- struct{}{}

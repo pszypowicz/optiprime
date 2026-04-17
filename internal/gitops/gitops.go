@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/pszypowicz/optiprime-sync/internal/applog"
 )
 
 const fetchTimeout = 15 * time.Second
@@ -42,11 +44,30 @@ type Status struct {
 	Ahead  int // vs Upstream if set, else vs origin/default
 	Behind int
 
+	// MergedInDefault: every commit unique to HEAD has a patch-equivalent
+	// commit already in origin/<default>. Only computed on non-default
+	// branches. Catches plain merges, squash merges, and rebases.
+	MergedInDefault bool
+
 	InProgress InProgressOp
 	CanFF      bool // behind > 0, ahead == 0, clean, on default
 }
 
 func (s Status) Dirty() bool { return s.Staged+s.Unstaged+s.Conflicts > 0 }
+
+// SafeToUpdate is true when one keystroke can bring this repo to the tip of
+// origin/<default> without surprises. On the default branch that's a plain
+// fast-forward; on a feature branch it means the work is already upstream,
+// so switching to default and ff-merging is safe.
+func (s Status) SafeToUpdate() bool {
+	if s.InProgress != OpNone || s.Dirty() || s.Detached {
+		return false
+	}
+	if s.BranchIsDefault {
+		return s.CanFF
+	}
+	return s.MergedInDefault
+}
 
 func run(dir string, args ...string) (string, string, error) {
 	cmd := exec.Command("git", args...)
@@ -95,9 +116,11 @@ func Fetch(dir string) error {
 
 	err := cmd.Run()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		applog.Errorf("git.fetch", dir, "timed out after %s; stderr=%s", fetchTimeout, strings.TrimSpace(stderr.String()))
 		return fmt.Errorf("fetch timed out (%s)", fetchTimeout)
 	}
 	if err != nil {
+		applog.Errorf("git.fetch", dir, "%v; stderr=%s", err, strings.TrimSpace(stderr.String()))
 		return fmt.Errorf("%s: %w", strings.TrimSpace(stderr.String()), err)
 	}
 	return nil
@@ -129,7 +152,53 @@ func GetStatus(dir string) (Status, error) {
 
 	s.CanFF = !s.Detached && s.BranchIsDefault && !s.Dirty() && s.Behind > 0 && s.Ahead == 0
 
+	// On a feature branch, check whether every unique commit on HEAD already
+	// has a patch-equivalent commit in origin/<default>. git cherry marks
+	// upstream-present commits with "- <sha>" and missing ones with "+ <sha>".
+	if !s.Detached && !s.BranchIsDefault {
+		target := "origin/" + s.DefaultBranch
+		if out, _, err := run(dir, "cherry", target, "HEAD"); err == nil {
+			merged := true
+			for _, line := range strings.Split(out, "\n") {
+				if strings.HasPrefix(line, "+ ") {
+					merged = false
+					break
+				}
+			}
+			s.MergedInDefault = merged
+		}
+	}
+
 	return s, nil
+}
+
+// SwitchAndFF checks out the default branch (creating a tracking branch if
+// needed) and fast-forwards it to origin/<default>. Refuses to run on a
+// dirty working tree so the switch can't silently clobber user edits.
+func SwitchAndFF(dir string) error {
+	def := DefaultBranch(dir)
+
+	out, _, _ := run(dir, "status", "--porcelain")
+	if len(out) > 0 {
+		return fmt.Errorf("working tree dirty")
+	}
+
+	// Local <default> may not exist (user never checked it out). In that
+	// case create a tracking branch from origin/<default>.
+	if _, _, err := run(dir, "show-ref", "--verify", "--quiet", "refs/heads/"+def); err != nil {
+		if _, stderr, err := run(dir, "checkout", "-b", def, "--track", "origin/"+def); err != nil {
+			return fmt.Errorf("create local %s: %s: %w", def, strings.TrimSpace(stderr), err)
+		}
+	} else {
+		if _, stderr, err := run(dir, "checkout", def); err != nil {
+			return fmt.Errorf("checkout %s: %s: %w", def, strings.TrimSpace(stderr), err)
+		}
+	}
+
+	if _, stderr, err := run(dir, "merge", "--ff-only", "origin/"+def); err != nil {
+		return fmt.Errorf("ff %s: %s: %w", def, strings.TrimSpace(stderr), err)
+	}
+	return nil
 }
 
 func parsePorcelainV2(out string, s *Status) {
@@ -222,9 +291,82 @@ func FastForward(dir string) error {
 	}
 	_, stderr, err := run(dir, "merge", "--ff-only", "origin/"+def)
 	if err != nil {
+		applog.Errorf("git.ff", dir, "%v; stderr=%s", err, stderr)
 		return fmt.Errorf("%s: %w", stderr, err)
 	}
 	return nil
+}
+
+// Details is an extended, on-demand view of a repo shown in the info panel.
+// Purposefully cheap to compute - only reads local git state.
+type Details struct {
+	LastCommitSHA     string
+	LastCommitSubject string
+	LastCommitAuthor  string
+	LastCommitAge     string
+	DirtyFiles        []DirtyFile
+	Stashes           []StashEntry
+	UpstreamBranch    string
+	RemoteURL         string
+}
+
+type DirtyFile struct {
+	XY   string // two-char porcelain status (e.g. " M", "??")
+	Path string
+}
+
+type StashEntry struct {
+	Ref     string // stash@{0}
+	Subject string
+	Age     string // relative
+}
+
+func GetDetails(dir string) (Details, error) {
+	d := Details{}
+
+	if out, _, err := run(dir, "log", "-1", "--pretty=format:%h\t%s\t%an\t%ar"); err == nil && out != "" {
+		parts := strings.SplitN(out, "\t", 4)
+		if len(parts) == 4 {
+			d.LastCommitSHA = parts[0]
+			d.LastCommitSubject = parts[1]
+			d.LastCommitAuthor = parts[2]
+			d.LastCommitAge = parts[3]
+		}
+	}
+
+	if out, _, err := run(dir, "status", "--porcelain=v1"); err == nil && out != "" {
+		for _, line := range strings.Split(out, "\n") {
+			if len(line) < 3 {
+				continue
+			}
+			d.DirtyFiles = append(d.DirtyFiles, DirtyFile{
+				XY:   line[:2],
+				Path: strings.TrimSpace(line[3:]),
+			})
+		}
+	}
+
+	if out, _, err := run(dir, "stash", "list", "--format=%gd\t%gs\t%cr"); err == nil && out != "" {
+		for _, line := range strings.Split(out, "\n") {
+			parts := strings.SplitN(line, "\t", 3)
+			if len(parts) == 3 {
+				d.Stashes = append(d.Stashes, StashEntry{
+					Ref:     parts[0],
+					Subject: parts[1],
+					Age:     parts[2],
+				})
+			}
+		}
+	}
+
+	if out, _, err := run(dir, "rev-parse", "--abbrev-ref", "@{upstream}"); err == nil {
+		d.UpstreamBranch = out
+	}
+	if out, _, err := run(dir, "remote", "get-url", "origin"); err == nil {
+		d.RemoteURL = out
+	}
+
+	return d, nil
 }
 
 func Clone(sshURL, dest string) error {
@@ -233,6 +375,7 @@ func Clone(sshURL, dest string) error {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		applog.Errorf("git.clone", dest, "%v; stderr=%s", err, strings.TrimSpace(stderr.String()))
 		return fmt.Errorf("%s: %w", strings.TrimSpace(stderr.String()), err)
 	}
 	return nil

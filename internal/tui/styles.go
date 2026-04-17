@@ -34,7 +34,14 @@ var (
 			Foreground(colorMuted).
 			Padding(0, 2)
 
-	rowSelected = lipgloss.NewStyle().Bold(true)
+	// Zebra stripes for alt rows - subtle enough that colored foregrounds stay readable.
+	zebraStyle = lipgloss.NewStyle().
+			Background(lipgloss.AdaptiveColor{Light: "254", Dark: "236"})
+
+	// Cursor row uses a stronger tint so it stands out even on a zebra row.
+	rowSelected = lipgloss.NewStyle().
+			Bold(true).
+			Background(lipgloss.AdaptiveColor{Light: "252", Dark: "238"})
 
 	okStyle    = lipgloss.NewStyle().Foreground(colorOK)
 	warnStyle  = lipgloss.NewStyle().Foreground(colorWarn)
@@ -43,10 +50,25 @@ var (
 	prStyle    = lipgloss.NewStyle().Foreground(colorPR).Bold(true)
 	helpStyle  = lipgloss.NewStyle().Foreground(colorSubtle)
 
+	// Bold + underlined header. Foreground is chosen for contrast against the
+	// terminal background, not against the accent color (which is what
+	// colorHeading is tuned for) - on a light terminal colorHeading is
+	// near-white and becomes invisible.
+	tableHeaderStyle = lipgloss.NewStyle().
+				Bold(true).
+				Underline(true).
+				Foreground(lipgloss.AdaptiveColor{Light: "235", Dark: "254"})
+
 	boxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(colorAccent).
 			Padding(0, 1)
+
+	overlayStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorAccent).
+			Background(lipgloss.AdaptiveColor{Light: "255", Dark: "234"}).
+			Padding(1, 2)
 )
 
 // Column width accounting. cursor+check are fixed; the other columns are

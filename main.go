@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/pszypowicz/optiprime-sync/internal/applog"
 	"github.com/pszypowicz/optiprime-sync/internal/config"
 	"github.com/pszypowicz/optiprime-sync/internal/tui"
 )
@@ -25,8 +26,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	if logPath, err := applog.Init(); err != nil {
+		fmt.Fprintf(os.Stderr, "optiprime-sync: could not open log at %s: %v\n", logPath, err)
+	}
+	applog.Infof("start", "", "optiprime-sync started; log path=%s", applog.Path())
+
 	if err := tui.Run(cfg); err != nil {
+		applog.Errorf("tui", "", "run failed: %v", err)
 		fmt.Fprintln(os.Stderr, "optiprime-sync:", err)
+		fmt.Fprintln(os.Stderr, "see", applog.Path(), "for details")
 		os.Exit(1)
 	}
 }
