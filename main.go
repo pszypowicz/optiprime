@@ -26,6 +26,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Best-effort: if the log can't be opened we still want the TUI to run.
 	if logPath, err := applog.Init(); err != nil {
 		fmt.Fprintf(os.Stderr, "optiprime-sync: could not open log at %s: %v\n", logPath, err)
 	}
