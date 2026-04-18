@@ -2,15 +2,27 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"os"
+	"runtime/debug"
 
 	"github.com/pszypowicz/optiprime-sync/internal/applog"
 	"github.com/pszypowicz/optiprime-sync/internal/config"
 	"github.com/pszypowicz/optiprime-sync/internal/tui"
 )
 
+// version is overridable at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
+	showVersion := flag.Bool("version", false, "print version and exit")
+	flag.Parse()
+	if *showVersion {
+		fmt.Println(versionString())
+		return
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		if errors.Is(err, config.ErrMissingEnv) {
@@ -38,4 +50,32 @@ func main() {
 		fmt.Fprintln(os.Stderr, "see", applog.Path(), "for details")
 		os.Exit(1)
 	}
+}
+
+func versionString() string {
+	if version != "dev" {
+		return version
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return version
+	}
+	var rev, modified string
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			rev = s.Value
+		case "vcs.modified":
+			if s.Value == "true" {
+				modified = "-dirty"
+			}
+		}
+	}
+	if rev == "" {
+		return version
+	}
+	if len(rev) > 12 {
+		rev = rev[:12]
+	}
+	return version + "-" + rev + modified
 }
