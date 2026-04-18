@@ -34,7 +34,7 @@ func TestListRepos_ProjectWithSpacesEscaped(t *testing.T) {
 		gotPath = r.URL.Path
 		_, _ = w.Write([]byte(`{"value":[]}`))
 	})
-	c.Project = "My Proj"
+	c.project = "My Proj"
 
 	_, err := c.ListRepos(context.Background())
 	require.NoError(t, err)

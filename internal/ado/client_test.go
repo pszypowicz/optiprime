@@ -22,20 +22,20 @@ func TestNewClient_OrgNormalization(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := NewClient(tc.org, "proj", "pat")
-			assert.Equal(t, tc.wantURL, c.BaseURL)
-			assert.Equal(t, "proj", c.Project)
-			assert.Equal(t, "pat", c.PAT)
-			assert.NotNil(t, c.HTTP)
+			assert.Equal(t, tc.wantURL, c.baseURL)
+			assert.Equal(t, "proj", c.project)
+			assert.Equal(t, "pat", c.pat)
+			assert.NotNil(t, c.httpClient)
 		})
 	}
 }
 
 func TestAuthHeader(t *testing.T) {
 	// base64(":abc123") = "OmFiYzEyMw=="
-	c := &Client{PAT: "abc123"}
+	c := &Client{pat: "abc123"}
 	assert.Equal(t, "Basic OmFiYzEyMw==", c.authHeader())
 
 	// base64(":") = "Og=="
-	cEmpty := &Client{PAT: ""}
+	cEmpty := &Client{pat: ""}
 	assert.Equal(t, "Basic Og==", cEmpty.authHeader())
 }

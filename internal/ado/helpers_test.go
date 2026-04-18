@@ -11,10 +11,10 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) (*Client, *httptest.S
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 	c := &Client{
-		BaseURL: srv.URL,
-		Project: "proj",
-		PAT:     "tok",
-		HTTP:    srv.Client(),
+		baseURL:    srv.URL,
+		project:    "proj",
+		pat:        "tok",
+		httpClient: srv.Client(),
 	}
 	return c, srv
 }
