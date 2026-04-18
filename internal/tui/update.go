@@ -246,12 +246,12 @@ func (m model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if !it.Selected {
 					continue
 				}
-				switch {
-				case it.Status.BranchIsDefault && it.Status.CanFF:
+				switch it.Status.UpdateAction() {
+				case gitops.UpdateFastForward:
 					it.Loading = true
 					it.Message = "updating"
 					cmds = append(cmds, ffCmd(m.sem, it.Name, it.Path))
-				case !it.Status.BranchIsDefault && it.Status.SafeToUpdate():
+				case gitops.UpdateSwitchAndFF:
 					it.Loading = true
 					it.Message = "switching"
 					cmds = append(cmds, switchAndFFCmd(m.sem, it.Name, it.Path))

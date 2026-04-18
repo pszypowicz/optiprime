@@ -26,56 +26,58 @@ func TestStatus_Dirty(t *testing.T) {
 	}
 }
 
-func TestStatus_SafeToUpdate(t *testing.T) {
+func TestStatus_UpdateAction(t *testing.T) {
 	cases := []struct {
 		name string
 		s    Status
-		want bool
+		want UpdateAction
 	}{
 		{
 			name: "in-progress op blocks",
 			s:    Status{BranchIsDefault: true, CanFF: true, InProgress: OpMerging},
-			want: false,
+			want: UpdateSkip,
 		},
 		{
 			name: "dirty blocks",
 			s:    Status{BranchIsDefault: true, CanFF: true, Unstaged: 1},
-			want: false,
+			want: UpdateSkip,
 		},
 		{
 			name: "detached blocks",
 			s:    Status{Detached: true, BranchIsDefault: false, MergedInDefault: true},
-			want: false,
+			want: UpdateSkip,
 		},
 		{
 			name: "default branch + CanFF",
 			s:    Status{BranchIsDefault: true, CanFF: true},
-			want: true,
+			want: UpdateFastForward,
 		},
 		{
 			name: "default branch + !CanFF",
 			s:    Status{BranchIsDefault: true, CanFF: false},
-			want: false,
+			want: UpdateSkip,
 		},
 		{
 			name: "feature + merged upstream",
 			s:    Status{BranchIsDefault: false, MergedInDefault: true},
-			want: true,
+			want: UpdateSwitchAndFF,
 		},
 		{
 			name: "feature + not merged",
 			s:    Status{BranchIsDefault: false, MergedInDefault: false},
-			want: false,
+			want: UpdateSkip,
 		},
 		{
 			name: "feature + merged but in-progress gate wins",
 			s:    Status{BranchIsDefault: false, MergedInDefault: true, InProgress: OpRebasing},
-			want: false,
+			want: UpdateSkip,
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, tc.s.SafeToUpdate())
+			assert.Equal(t, tc.want, tc.s.UpdateAction())
+			// SafeToUpdate must agree: true iff UpdateAction != UpdateSkip.
+			assert.Equal(t, tc.want != UpdateSkip, tc.s.SafeToUpdate())
 		})
 	}
 }
