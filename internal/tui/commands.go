@@ -10,10 +10,6 @@ import (
 	"github.com/pszypowicz/optiprime-sync/internal/scanner"
 )
 
-const maxParallel = 8
-
-var sem = make(chan struct{}, maxParallel)
-
 func scanLocalsCmd(root string) tea.Cmd {
 	return func() tea.Msg {
 		repos, err := scanner.FindRepos(root)
@@ -32,7 +28,7 @@ func scanLocalsCmd(root string) tea.Cmd {
 	}
 }
 
-func fetchAndStatusCmd(name, path string) tea.Cmd {
+func fetchAndStatusCmd(sem chan struct{}, name, path string) tea.Cmd {
 	return func() tea.Msg {
 		sem <- struct{}{}
 		defer func() { <-sem }()
@@ -50,7 +46,7 @@ func fetchAndStatusCmd(name, path string) tea.Cmd {
 
 // statusOnlyCmd runs git status without fetching. Used for repos we already
 // know are archived/orphan in ADO so we don't wait on a doomed fetch.
-func statusOnlyCmd(name, path string) tea.Cmd {
+func statusOnlyCmd(sem chan struct{}, name, path string) tea.Cmd {
 	return func() tea.Msg {
 		sem <- struct{}{}
 		defer func() { <-sem }()
@@ -85,7 +81,7 @@ func fetchPRsCmd(c *ado.Client) tea.Cmd {
 	}
 }
 
-func ffCmd(name, path string) tea.Cmd {
+func ffCmd(sem chan struct{}, name, path string) tea.Cmd {
 	return func() tea.Msg {
 		sem <- struct{}{}
 		defer func() { <-sem }()
@@ -103,7 +99,7 @@ func ffCmd(name, path string) tea.Cmd {
 
 // switchAndFFCmd checks out the default branch and fast-forwards it.
 // Used for repos whose feature branch work is already in origin/<default>.
-func switchAndFFCmd(name, path string) tea.Cmd {
+func switchAndFFCmd(sem chan struct{}, name, path string) tea.Cmd {
 	return func() tea.Msg {
 		sem <- struct{}{}
 		defer func() { <-sem }()
@@ -119,7 +115,7 @@ func switchAndFFCmd(name, path string) tea.Cmd {
 	}
 }
 
-func fetchDetailsCmd(name, path string) tea.Cmd {
+func fetchDetailsCmd(sem chan struct{}, name, path string) tea.Cmd {
 	return func() tea.Msg {
 		sem <- struct{}{}
 		defer func() { <-sem }()
@@ -129,7 +125,7 @@ func fetchDetailsCmd(name, path string) tea.Cmd {
 	}
 }
 
-func cloneCmd(name, sshURL, dest string) tea.Cmd {
+func cloneCmd(sem chan struct{}, name, sshURL, dest string) tea.Cmd {
 	return func() tea.Msg {
 		sem <- struct{}{}
 		defer func() { <-sem }()

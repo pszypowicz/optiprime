@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/pszypowicz/optiprime-sync/internal/gitops"
@@ -114,7 +113,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				it.Err = ""
 			}
 		}
-		// Rescan locals to pick up the new clone.
 		m.loadingLocals = true
 		return m, scanLocalsCmd(m.cfg.ScopeRoot)
 
@@ -130,7 +128,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			it.Loading = true
 		}
 		m.flash = "re-fetching " + msg.name
-		return m, tea.Batch(reenable, fetchAndStatusCmd(msg.name, msg.path))
+		return m, tea.Batch(reenable, fetchAndStatusCmd(m.sem, msg.name, msg.path))
 
 	case detailsMsg:
 		delete(m.detailsLoading, msg.name)
@@ -252,11 +250,11 @@ func (m model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 				case it.Status.BranchIsDefault && it.Status.CanFF:
 					it.Loading = true
 					it.Message = "updating"
-					cmds = append(cmds, ffCmd(it.Name, it.Path))
+					cmds = append(cmds, ffCmd(m.sem, it.Name, it.Path))
 				case !it.Status.BranchIsDefault && it.Status.SafeToUpdate():
 					it.Loading = true
 					it.Message = "switching"
-					cmds = append(cmds, switchAndFFCmd(it.Name, it.Path))
+					cmds = append(cmds, switchAndFFCmd(m.sem, it.Name, it.Path))
 				default:
 					it.Message = "skipped"
 					it.Selected = false
@@ -308,7 +306,7 @@ func (m model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			dest := filepath.Join(m.cfg.ScopeRoot, it.Repo.Name)
 			it.Cloning = true
 			it.Message = "cloning"
-			return m, cloneCmd(it.Repo.Name, it.Repo.SSHURL, dest)
+			return m, cloneCmd(m.sem, it.Repo.Name, it.Repo.SSHURL, dest)
 		}
 		return m, nil
 	}
@@ -351,193 +349,10 @@ func (m *model) handleClick(x, y int) tea.Cmd {
 	}
 	m.setCursor(idx)
 
-	// Click inside the [ ]/[x] cell also toggles selection (local tab only).
 	contentX := x - 2 // strip border + left padding
 	inCheck := contentX >= colCursorW && contentX < colCursorW+colCheckW
 	if m.tab == tabLocal && inCheck && idx < len(m.locals) {
 		m.locals[idx].Selected = !m.locals[idx].Selected
 	}
 	return m.ensureDetailsLoaded()
-}
-
-func (m *model) moveCursor(delta int) {
-	n := m.itemCount()
-	if n == 0 {
-		return
-	}
-	c := m.cursor() + delta
-	if c < 0 {
-		c = 0
-	}
-	if c >= n {
-		c = n - 1
-	}
-	m.setCursor(c)
-}
-
-func (m *model) cursor() int {
-	if m.tab == tabLocal {
-		return m.localCursor
-	}
-	return m.remoteCursor
-}
-
-func (m *model) setCursor(c int) {
-	if c < 0 {
-		c = 0
-	}
-	if m.tab == tabLocal {
-		m.localCursor = c
-	} else {
-		m.remoteCursor = c
-	}
-}
-
-func (m *model) itemCount() int {
-	if m.tab == tabLocal {
-		return len(m.locals)
-	}
-	return len(m.remotes)
-}
-
-func (m *model) scroll(delta int) {
-	n := m.itemCount()
-	vh := m.viewportHeight()
-	if n <= vh {
-		return
-	}
-	off := m.scrollOffset() + delta
-	maxOff := n - vh
-	if off < 0 {
-		off = 0
-	}
-	if off > maxOff {
-		off = maxOff
-	}
-	m.setScrollOffset(off)
-}
-
-func (m *model) scrollOffset() int {
-	if m.tab == tabLocal {
-		return m.localScroll
-	}
-	return m.remoteScroll
-}
-
-func (m *model) setScrollOffset(o int) {
-	if m.tab == tabLocal {
-		m.localScroll = o
-	} else {
-		m.remoteScroll = o
-	}
-}
-
-func (m *model) ensureCursorVisible() {
-	vh := m.viewportHeight()
-	if vh <= 0 {
-		return
-	}
-	cur := m.cursor()
-	off := m.scrollOffset()
-	switch {
-	case cur < off:
-		m.setScrollOffset(cur)
-	case cur >= off+vh:
-		m.setScrollOffset(cur - vh + 1)
-	}
-}
-
-func (m *model) findLocal(name string) *localItem {
-	for _, it := range m.locals {
-		if it.Name == name {
-			return it
-		}
-	}
-	return nil
-}
-
-func (m *model) findRemote(name string) *remoteItem {
-	for _, it := range m.remotes {
-		if it.Repo.Name == name {
-			return it
-		}
-	}
-	return nil
-}
-
-// startFetchesIfReady dispatches per-repo refresh once both the local scan
-// AND the ADO repo list are done. For repos we already know are archived
-// (disabled upstream) or orphan (not in ADO), it runs status-only and
-// skips the git fetch - saves ~15s per dead remote on startup.
-func (m *model) startFetchesIfReady() tea.Cmd {
-	if m.loadingLocals || m.loadingRemotes || m.fetchesStarted {
-		return nil
-	}
-	m.fetchesStarted = true
-
-	remoteMap := m.remoteByName()
-	cmds := make([]tea.Cmd, 0, len(m.locals))
-	for _, it := range m.locals {
-		if m.canSkipFetch(it.Name, remoteMap) {
-			cmds = append(cmds, statusOnlyCmd(it.Name, it.Path))
-		} else {
-			cmds = append(cmds, fetchAndStatusCmd(it.Name, it.Path))
-		}
-	}
-	if len(cmds) == 0 {
-		return nil
-	}
-	return tea.Batch(cmds...)
-}
-
-func (m *model) canSkipFetch(name string, remoteMap map[string]*remoteItem) bool {
-	// If we couldn't list remotes at all, play it safe and fetch everything.
-	if m.remoteListErr != "" {
-		return false
-	}
-	// Wikis don't appear in /_apis/git/repositories; fetch normally.
-	if strings.HasSuffix(name, ".wiki") {
-		return false
-	}
-	r, ok := remoteMap[name]
-	if !ok {
-		return true // orphan: local folder with no matching ADO repo
-	}
-	return r.Repo.Disabled // archived upstream
-}
-
-// ensureDetailsLoaded kicks off a fetch of git Details for the cursor repo
-// when the panel is open and we don't have them cached yet. Returns nil when
-// the panel is closed or the repo's details are already loaded / in flight.
-func (m *model) ensureDetailsLoaded() tea.Cmd {
-	if !m.detailsOpen || m.tab != tabLocal || len(m.locals) == 0 {
-		return nil
-	}
-	if m.localCursor < 0 || m.localCursor >= len(m.locals) {
-		return nil
-	}
-	it := m.locals[m.localCursor]
-	if m.detailsCache != nil {
-		if _, ok := m.detailsCache[it.Name]; ok {
-			return nil
-		}
-	}
-	if m.detailsLoading == nil {
-		m.detailsLoading = map[string]bool{}
-	}
-	if m.detailsLoading[it.Name] {
-		return nil
-	}
-	m.detailsLoading[it.Name] = true
-	return fetchDetailsCmd(it.Name, it.Path)
-}
-
-func (m *model) reconcileRemotes() {
-	local := make(map[string]bool, len(m.locals))
-	for _, it := range m.locals {
-		local[it.Name] = true
-	}
-	for _, r := range m.remotes {
-		r.Cloned = local[r.Repo.Name]
-	}
 }

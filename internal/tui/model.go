@@ -8,14 +8,14 @@ import (
 	"github.com/pszypowicz/optiprime-sync/internal/gitops"
 )
 
-
-
 type tab int
 
 const (
 	tabLocal tab = iota
 	tabRemote
 )
+
+const maxParallel = 8
 
 type localItem struct {
 	Name     string
@@ -58,6 +58,11 @@ type model struct {
 	fetchesStarted bool
 	flash          string // top-of-screen status line
 
+	// sem caps concurrent git/clone goroutines launched from background
+	// commands. Owned by the model so two concurrent models (e.g. in tests)
+	// don't share a global pool.
+	sem chan struct{}
+
 	// Details panel (toggled with `i` on the Local tab).
 	detailsOpen    bool
 	detailsCache   map[string]*gitops.Details
@@ -74,6 +79,7 @@ func newModel(cfg *config.Config) model {
 		loadingLocals:  true,
 		loadingRemotes: true,
 		loadingPRs:     true,
+		sem:            make(chan struct{}, maxParallel),
 	}
 }
 
