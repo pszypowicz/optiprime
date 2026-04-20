@@ -3,9 +3,10 @@
 // error, so anything interesting gets recorded here with its full body.
 //
 // Path resolution:
-//   $XDG_STATE_HOME/optiprime-sync/errors.log
-//   ~/.local/state/optiprime-sync/errors.log (fallback)
-//   $TMPDIR/optiprime-sync/errors.log        (last resort)
+//
+//	$XDG_STATE_HOME/optiprime-sync/errors.log
+//	~/.local/state/optiprime-sync/errors.log (fallback)
+//	$TMPDIR/optiprime-sync/errors.log        (last resort)
 package applog
 
 import (

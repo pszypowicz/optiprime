@@ -28,9 +28,9 @@ func TestLoad_Success(t *testing.T) {
 
 func TestLoad_MissingEnv(t *testing.T) {
 	cases := []struct {
-		name         string
+		name           string
 		org, proj, pat string
-		wantMissing  []string
+		wantMissing    []string
 	}{
 		{"all missing", "", "", "", []string{"ADO_ORG", "ADO_PROJECT", "AZURE_DEVOPS_EXT_PAT"}},
 		{"org missing", "", "p", "k", []string{"ADO_ORG"}},

@@ -29,10 +29,10 @@ func TestSwitchAndFF_DirtyTreeRefuses(t *testing.T) {
 func TestSwitchAndFF_LocalDefaultExistsHappyPath(t *testing.T) {
 	f := newFakeRunner(t)
 	primeDefaultBranch(f)
-	f.Set("", "", nil, "status", "--porcelain")                                   // clean
-	f.Set("", "", nil, "show-ref", "--verify", "--quiet", "refs/heads/main")     // exists
-	f.Set("", "", nil, "checkout", "main")                                        // checkout succeeds
-	f.Set("", "", nil, "merge", "--ff-only", "origin/main")                       // ff succeeds
+	f.Set("", "", nil, "status", "--porcelain")                              // clean
+	f.Set("", "", nil, "show-ref", "--verify", "--quiet", "refs/heads/main") // exists
+	f.Set("", "", nil, "checkout", "main")                                   // checkout succeeds
+	f.Set("", "", nil, "merge", "--ff-only", "origin/main")                  // ff succeeds
 
 	require.NoError(t, switchAndFF(f, "/repo"))
 	// Verify checkout -b was NOT called.

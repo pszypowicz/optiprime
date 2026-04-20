@@ -76,4 +76,3 @@ func (f *fakeRunner) RunCtx(ctx context.Context, dir string, env []string, args 
 	r := f.pop(key(args), args, dir, env)
 	return r.stdout, r.stderr, r.err
 }
-
