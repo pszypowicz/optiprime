@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Runs the same checks CI runs, against staged Go files.
+# Enable with: git config core.hooksPath .githooks
+
+set -euo pipefail
+
+staged_go=$(git diff --cached --name-only --diff-filter=ACM -- '*.go' || true)
+
+if [ -z "$staged_go" ]; then
+    exit 0
+fi
+
+unformatted=$(gofmt -l $staged_go || true)
+if [ -n "$unformatted" ]; then
+    echo "gofmt would rewrite the following staged files:" >&2
+    echo "$unformatted" >&2
+    echo "run: gofmt -w $unformatted" >&2
+    exit 1
+fi
+
+go vet ./...
+go test ./...
