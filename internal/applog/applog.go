@@ -4,9 +4,13 @@
 //
 // Path resolution:
 //
-//	$XDG_STATE_HOME/optiprime-sync/errors.log
-//	~/.local/state/optiprime-sync/errors.log (fallback)
-//	$TMPDIR/optiprime-sync/errors.log        (last resort)
+//	$XDG_STATE_HOME/optiprime-sync/errors.log (explicit override)
+//	~/Library/Logs/optiprime-sync/errors.log  (macOS)
+//	~/.local/state/optiprime-sync/errors.log  (other OSes)
+//	$TMPDIR/optiprime-sync/errors.log         (last resort)
+//
+// macOS gets ~/Library/Logs because that is the platform convention for
+// per-user log files and makes the log visible in Console.app's sidebar.
 package applog
 
 import (
@@ -14,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -62,6 +67,9 @@ func stateDir() string {
 		return filepath.Join(x, "optiprime-sync")
 	}
 	if h, err := os.UserHomeDir(); err == nil {
+		if runtime.GOOS == "darwin" {
+			return filepath.Join(h, "Library", "Logs", "optiprime-sync")
+		}
 		return filepath.Join(h, ".local", "state", "optiprime-sync")
 	}
 	return filepath.Join(os.TempDir(), "optiprime-sync")
