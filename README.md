@@ -22,11 +22,12 @@ No `az` CLI dependency - repos are listed via the ADO REST API directly.
 
 ## Environment
 
-| Variable               | Required | Purpose                                                                  |
-| ---------------------- | -------- | ------------------------------------------------------------------------ |
-| `ADO_ORG`              | yes      | ADO organisation name (the bit between `dev.azure.com/` and the project) |
-| `ADO_PROJECT`          | yes      | ADO project name                                                         |
-| `AZURE_DEVOPS_EXT_PAT` | yes      | PAT with Code (read) scope - used as the HTTP basic-auth password        |
+| Variable                   | Required | Purpose                                                                                                                                                                                      |
+| -------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ADO_ORG`                  | yes      | ADO organisation name (the bit between `dev.azure.com/` and the project)                                                                                                                     |
+| `ADO_PROJECT`              | yes      | ADO project name                                                                                                                                                                             |
+| `AZURE_DEVOPS_EXT_PAT`     | yes      | PAT with Code (read) scope - used as the HTTP basic-auth password                                                                                                                            |
+| `OPTIPRIME_SYNC_GIT_TRACE` | no       | Set to `1` to run fetch/clone with `GIT_TRACE=1` and `ssh -v`, recording the full output in the error log - use to diagnose connection failures (agent unreachable, auth rejected, host key) |
 
 Config-file support is not wired up yet - env is the only source.
 

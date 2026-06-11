@@ -27,7 +27,9 @@ func fetchWith(r GitRunner, dir string, timeout time.Duration) error {
 		"SSH_ASKPASS=/bin/true",
 		"GCM_INTERACTIVE=Never",
 	}
+	env = append(env, traceEnv()...)
 	_, stderr, err := r.RunCtx(ctx, dir, env, "fetch", "--quiet", "--prune", "origin")
+	traceLog("git.fetch", dir, stderr)
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		applog.Errorf("git.fetch", dir, "timed out after %s; stderr=%s", timeout, stderr)
 		return fmt.Errorf("fetch timed out (%s)", timeout)
