@@ -2,7 +2,8 @@ package config_test
 
 import (
 	"errors"
-	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/pszypowicz/optiprime-sync/internal/config"
@@ -10,76 +11,125 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoad_Success(t *testing.T) {
-	t.Setenv("ADO_ORG", "foo-org")
-	t.Setenv("ADO_PROJECT", "bar-project")
-	t.Setenv("AZURE_DEVOPS_EXT_PAT", "pat-xyz")
+const (
+	sshURL   = "git@ssh.dev.azure.com:v3/foo-org/bar-project/repo"
+	httpsURL = "https://foo-org@dev.azure.com/foo-org/bar-project/_git/repo"
+)
+
+// initRepo creates a real git repo under root with the given origin URL,
+// so Load exercises the actual scan-and-derive chain.
+func initRepo(t *testing.T, root, name, remote string) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := filepath.Join(root, name)
+	for _, args := range [][]string{
+		{"init", "--quiet", dir},
+		{"-C", dir, "remote", "add", "origin", remote},
+	} {
+		out, err := exec.Command("git", args...).CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+}
+
+// setEnv pins all three vars so values leaking in from the developer's or
+// CI shell can't change what Load sees.
+func setEnv(t *testing.T, org, project, pat string) {
+	t.Helper()
+	t.Setenv("ADO_ORG", org)
+	t.Setenv("ADO_PROJECT", project)
+	t.Setenv("AZURE_DEVOPS_EXT_PAT", pat)
+}
+
+func TestLoad_AllOverridesSet(t *testing.T) {
+	setEnv(t, "foo-org", "bar-project", "pat-xyz")
+	dir := t.TempDir()
+	t.Chdir(dir)
 
 	cfg, err := config.Load()
 	require.NoError(t, err)
-	require.NotNil(t, cfg)
 
-	cwd, _ := os.Getwd()
 	assert.Equal(t, "foo-org", cfg.Org)
 	assert.Equal(t, "bar-project", cfg.Project)
 	assert.Equal(t, "pat-xyz", cfg.PAT)
-	assert.Equal(t, cwd, cfg.ScopeRoot)
+	assert.Equal(t, dir, cfg.ScopeRoot)
 }
 
-func TestLoad_MissingEnv(t *testing.T) {
-	cases := []struct {
-		name           string
-		org, proj, pat string
-		wantMissing    []string
-	}{
-		{"all missing", "", "", "", []string{"ADO_ORG", "ADO_PROJECT", "AZURE_DEVOPS_EXT_PAT"}},
-		{"org missing", "", "p", "k", []string{"ADO_ORG"}},
-		{"project missing", "o", "", "k", []string{"ADO_PROJECT"}},
-		{"pat missing", "o", "p", "", []string{"AZURE_DEVOPS_EXT_PAT"}},
-		{"org+pat missing", "", "p", "", []string{"ADO_ORG", "AZURE_DEVOPS_EXT_PAT"}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("ADO_ORG", tc.org)
-			t.Setenv("ADO_PROJECT", tc.proj)
-			t.Setenv("AZURE_DEVOPS_EXT_PAT", tc.pat)
+func TestLoad_MissingPAT(t *testing.T) {
+	setEnv(t, "foo-org", "bar-project", "")
+	t.Chdir(t.TempDir())
 
-			cfg, err := config.Load()
-			require.Error(t, err)
-			assert.Nil(t, cfg)
-			assert.True(t, errors.Is(err, config.ErrMissingEnv),
-				"error should wrap ErrMissingEnv, got %v", err)
-			for _, name := range tc.wantMissing {
-				assert.Contains(t, err.Error(), name)
-			}
-		})
-	}
-}
-
-// TestLoad_ErrorOrder documents that missing var names appear in the code's
-// check order: ORG, PROJECT, PAT. Guards against someone reordering the
-// checks and quietly changing the error message shape consumers might parse.
-func TestLoad_ErrorOrder(t *testing.T) {
-	t.Setenv("ADO_ORG", "")
-	t.Setenv("ADO_PROJECT", "set")
-	t.Setenv("AZURE_DEVOPS_EXT_PAT", "")
-
-	_, err := config.Load()
+	cfg, err := config.Load()
 	require.Error(t, err)
-	msg := err.Error()
-	orgIdx := indexOf(msg, "ADO_ORG")
-	patIdx := indexOf(msg, "AZURE_DEVOPS_EXT_PAT")
-	require.GreaterOrEqual(t, orgIdx, 0)
-	require.GreaterOrEqual(t, patIdx, 0)
-	assert.Less(t, orgIdx, patIdx, "ADO_ORG should appear before AZURE_DEVOPS_EXT_PAT")
-	assert.NotContains(t, msg, "ADO_PROJECT")
+	assert.Nil(t, cfg)
+	assert.True(t, errors.Is(err, config.ErrMissingEnv))
+	assert.Contains(t, err.Error(), "AZURE_DEVOPS_EXT_PAT")
 }
 
-func indexOf(s, sub string) int {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return i
-		}
-	}
-	return -1
+func TestLoad_DerivesFromRemotes(t *testing.T) {
+	setEnv(t, "", "", "pat-xyz")
+	dir := t.TempDir()
+	initRepo(t, dir, "repo-ssh", sshURL)
+	initRepo(t, dir, "repo-https", httpsURL)
+	t.Chdir(dir)
+
+	cfg, err := config.Load()
+	require.NoError(t, err)
+
+	assert.Equal(t, "foo-org", cfg.Org)
+	assert.Equal(t, "bar-project", cfg.Project)
+}
+
+func TestLoad_PartialOverrideWins(t *testing.T) {
+	setEnv(t, "override-org", "", "pat-xyz")
+	dir := t.TempDir()
+	initRepo(t, dir, "repo", sshURL)
+	t.Chdir(dir)
+
+	cfg, err := config.Load()
+	require.NoError(t, err)
+
+	assert.Equal(t, "override-org", cfg.Org, "env override beats the derived org")
+	assert.Equal(t, "bar-project", cfg.Project, "project still derives from remotes")
+}
+
+func TestLoad_NoRemotesNoOverrides(t *testing.T) {
+	setEnv(t, "", "", "pat-xyz")
+	t.Chdir(t.TempDir())
+
+	cfg, err := config.Load()
+	require.Error(t, err)
+	assert.Nil(t, cfg)
+	assert.True(t, errors.Is(err, config.ErrScopeUnresolved))
+	assert.Contains(t, err.Error(), "ADO_ORG")
+}
+
+func TestLoad_ConflictingOrgs(t *testing.T) {
+	setEnv(t, "", "", "pat-xyz")
+	dir := t.TempDir()
+	initRepo(t, dir, "repo-a", "git@ssh.dev.azure.com:v3/org-one/proj/a")
+	initRepo(t, dir, "repo-b", "git@ssh.dev.azure.com:v3/org-two/proj/b")
+	t.Chdir(dir)
+
+	cfg, err := config.Load()
+	require.Error(t, err)
+	assert.Nil(t, cfg)
+	assert.True(t, errors.Is(err, config.ErrScopeUnresolved))
+	assert.Contains(t, err.Error(), "org-one")
+	assert.Contains(t, err.Error(), "org-two")
+}
+
+func TestLoad_NonADORemotesIgnored(t *testing.T) {
+	setEnv(t, "", "", "pat-xyz")
+	dir := t.TempDir()
+	initRepo(t, dir, "github-repo", "git@github.com:someone/tool.git")
+	initRepo(t, dir, "ado-repo", sshURL)
+	t.Chdir(dir)
+
+	cfg, err := config.Load()
+	require.NoError(t, err)
+
+	assert.Equal(t, "foo-org", cfg.Org)
+	assert.Equal(t, "bar-project", cfg.Project)
 }

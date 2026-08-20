@@ -69,7 +69,7 @@ func getDetails(r GitRunner, dir string) (Details, error) {
 	if out, _, err := r.Run(dir, "rev-parse", "--abbrev-ref", "@{upstream}"); err == nil {
 		d.UpstreamBranch = out
 	}
-	if out, _, err := r.Run(dir, "remote", "get-url", "origin"); err == nil {
+	if out, err := remoteURLOf(r, dir); err == nil {
 		d.RemoteURL = out
 	}
 
