@@ -3,9 +3,9 @@ package tui
 import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/pszypowicz/optiprime-sync/internal/ado"
-	"github.com/pszypowicz/optiprime-sync/internal/config"
-	"github.com/pszypowicz/optiprime-sync/internal/gitops"
+	"github.com/pszypowicz/optiprime/internal/ado"
+	"github.com/pszypowicz/optiprime/internal/config"
+	"github.com/pszypowicz/optiprime/internal/gitops"
 )
 
 type tab int

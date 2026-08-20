@@ -4,10 +4,10 @@
 //
 // Path resolution:
 //
-//	$XDG_STATE_HOME/optiprime-sync/errors.log (explicit override)
-//	~/Library/Logs/optiprime-sync/errors.log  (macOS)
-//	~/.local/state/optiprime-sync/errors.log  (other OSes)
-//	$TMPDIR/optiprime-sync/errors.log         (last resort)
+//	$XDG_STATE_HOME/optiprime/errors.log (explicit override)
+//	~/Library/Logs/optiprime/errors.log  (macOS)
+//	~/.local/state/optiprime/errors.log  (other OSes)
+//	$TMPDIR/optiprime/errors.log         (last resort)
 //
 // macOS gets ~/Library/Logs because that is the platform convention for
 // per-user log files and makes the log visible in Console.app's sidebar.
@@ -64,15 +64,15 @@ func Init() (string, error) {
 
 func stateDir() string {
 	if x := os.Getenv("XDG_STATE_HOME"); x != "" {
-		return filepath.Join(x, "optiprime-sync")
+		return filepath.Join(x, "optiprime")
 	}
 	if h, err := os.UserHomeDir(); err == nil {
 		if runtime.GOOS == "darwin" {
-			return filepath.Join(h, "Library", "Logs", "optiprime-sync")
+			return filepath.Join(h, "Library", "Logs", "optiprime")
 		}
-		return filepath.Join(h, ".local", "state", "optiprime-sync")
+		return filepath.Join(h, ".local", "state", "optiprime")
 	}
-	return filepath.Join(os.TempDir(), "optiprime-sync")
+	return filepath.Join(os.TempDir(), "optiprime")
 }
 
 // Path returns the resolved log file path. Safe to call before Init.

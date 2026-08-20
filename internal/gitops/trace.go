@@ -3,14 +3,14 @@ package gitops
 import (
 	"os"
 
-	"github.com/pszypowicz/optiprime-sync/internal/applog"
+	"github.com/pszypowicz/optiprime/internal/applog"
 )
 
 // TraceEnvVar opts into verbose connection diagnostics for the git
 // operations that talk to the remote (fetch, clone). Any value other
 // than "", "0", or "false" enables it. Off by default because a single
 // traced fetch produces dozens of log lines.
-const TraceEnvVar = "OPTIPRIME_SYNC_GIT_TRACE"
+const TraceEnvVar = "OPTIPRIME_GIT_TRACE"
 
 func traceEnabled() bool {
 	switch os.Getenv(TraceEnvVar) {

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pszypowicz/optiprime-sync/internal/applog"
+	"github.com/pszypowicz/optiprime/internal/applog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

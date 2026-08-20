@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/pszypowicz/optiprime-sync/internal/applog"
+	"github.com/pszypowicz/optiprime/internal/applog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +15,7 @@ func TestPath_XDGStateHomeOverrides(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", dir)
 
-	assert.Equal(t, filepath.Join(dir, "optiprime-sync", "errors.log"), applog.Path())
+	assert.Equal(t, filepath.Join(dir, "optiprime", "errors.log"), applog.Path())
 }
 
 func TestPath_PlatformDefault(t *testing.T) {
@@ -24,9 +24,9 @@ func TestPath_PlatformDefault(t *testing.T) {
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
 
-	want := filepath.Join(home, ".local", "state", "optiprime-sync", "errors.log")
+	want := filepath.Join(home, ".local", "state", "optiprime", "errors.log")
 	if runtime.GOOS == "darwin" {
-		want = filepath.Join(home, "Library", "Logs", "optiprime-sync", "errors.log")
+		want = filepath.Join(home, "Library", "Logs", "optiprime", "errors.log")
 	}
 	assert.Equal(t, want, applog.Path())
 }

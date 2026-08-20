@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/pszypowicz/optiprime-sync/internal/gitops"
+	"github.com/pszypowicz/optiprime/internal/gitops"
 )
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

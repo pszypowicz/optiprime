@@ -5,9 +5,9 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/pszypowicz/optiprime-sync/internal/ado"
-	"github.com/pszypowicz/optiprime-sync/internal/gitops"
-	"github.com/pszypowicz/optiprime-sync/internal/scanner"
+	"github.com/pszypowicz/optiprime/internal/ado"
+	"github.com/pszypowicz/optiprime/internal/gitops"
+	"github.com/pszypowicz/optiprime/internal/scanner"
 )
 
 func scanLocalsCmd(root string) tea.Cmd {

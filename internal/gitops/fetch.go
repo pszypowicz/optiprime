@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pszypowicz/optiprime-sync/internal/applog"
+	"github.com/pszypowicz/optiprime/internal/applog"
 )
 
 const fetchTimeout = 15 * time.Second
