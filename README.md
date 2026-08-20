@@ -15,27 +15,34 @@ is treated as one local copy of an ADO repo (matched by folder name).
 The tool is a thin layer on top of the repos. Git owns all protocol and auth
 handling for fetch and clone, with your normal git config, ssh agent, and
 credential helpers. The PAT is used only for the ADO REST API, which git
-cannot serve: the repo list and the PR counts.
+cannot serve: the repo list and the PR counts. The PAT is optional - without
+it the tool runs in git-only mode and turns those two features off.
 
 ## Requirements
 
 - `git`, `ssh` on PATH
 - SSH key registered with ADO (this tool clones via `sshUrl`)
-- An ADO Personal Access Token with **Code (read)** scope
+- Optional: an ADO Personal Access Token with **Code (read)** scope, for the
+  Remote tab and the PR counts
 
 No `az` CLI dependency - repos are listed via the ADO REST API directly.
 
 ## Environment
 
-| Variable                   | Required | Purpose                                                                                                                                                                                      |
-| -------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AZURE_DEVOPS_EXT_PAT`     | yes      | PAT with Code (read) scope - used as the HTTP basic-auth password for the REST API                                                                                                           |
-| `ADO_ORG`                  | no       | Override for the ADO organization name. When unset, the tool derives it from the `origin` remotes of the repos in scope                                                                      |
-| `ADO_PROJECT`              | no       | Override for the ADO project name. Derived the same way when unset                                                                                                                           |
-| `OPTIPRIME_GIT_TRACE` | no       | Set to `1` to run fetch/clone with `GIT_TRACE=1` and `ssh -v`, recording the full output in the error log - use to diagnose connection failures (agent unreachable, auth rejected, host key) |
+| Variable               | Required | Purpose                                                                                                                                                                                      |
+| ---------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AZURE_DEVOPS_EXT_PAT` | no       | PAT with Code (read) scope - used as the HTTP basic-auth password for the REST API. When unset, the tool runs in git-only mode                                                               |
+| `ADO_ORG`              | no       | Override for the ADO organization name. When unset, the tool derives it from the `origin` remotes of the repos in scope                                                                      |
+| `ADO_PROJECT`          | no       | Override for the ADO project name. Derived the same way when unset                                                                                                                           |
+| `OPTIPRIME_GIT_TRACE`  | no       | Set to `1` to run fetch/clone with `GIT_TRACE=1` and `ssh -v`, recording the full output in the error log - use to diagnose connection failures (agent unreachable, auth rejected, host key) |
 
-Only the PAT is required. The org and the project come from the `origin`
-remotes of the repos in the scope directory. Both HTTPS remotes
+No variable is required. Without a PAT the tool starts in git-only mode:
+scan, fetch, fast-forward, and lazygit work as normal, while the Remote tab,
+the PR counts, and the `archived upstream` / `not in ADO` states are off.
+The header shows a notice, and the Remote tab reads `Remote (off)`.
+
+With a PAT, the org and the project come from the `origin` remotes of the
+repos in the scope directory. Both HTTPS remotes
 (`https://dev.azure.com/<org>/<project>/_git/<repo>`) and SSH remotes
 (`git@ssh.dev.azure.com:v3/<org>/<project>/<repo>`) are recognized. The tool
 exits with an error if the remotes disagree, or if the scope contains no ADO

@@ -142,17 +142,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case refreshMsg:
 		m.loadingLocals = true
-		m.loadingRemotes = true
-		m.loadingPRs = true
 		m.fetchesStarted = false
 		m.scanErr = ""
-		m.remoteListErr = ""
-		m.prErr = ""
-		return m, tea.Batch(
-			scanLocalsCmd(m.cfg.ScopeRoot),
-			listRemotesCmd(m.adoClient),
-			fetchPRsCmd(m.adoClient),
-		)
+		cmds := []tea.Cmd{scanLocalsCmd(m.cfg.ScopeRoot)}
+		if m.remoteEnabled() {
+			m.loadingRemotes = true
+			m.loadingPRs = true
+			m.remoteListErr = ""
+			m.prErr = ""
+			cmds = append(cmds, listRemotesCmd(m.adoClient), fetchPRsCmd(m.adoClient))
+		}
+		return m, tea.Batch(cmds...)
 
 	default:
 		// spinner tick and others
@@ -174,11 +174,7 @@ func (m model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "tab":
-		if m.tab == tabLocal {
-			m.tab = tabRemote
-		} else {
-			m.tab = tabLocal
-		}
+		m.toggleTab()
 		return m, nil
 
 	case "r":
@@ -329,11 +325,7 @@ func (m model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *model) handleClick(x, y int) tea.Cmd {
 	switch {
 	case y == 2:
-		if m.tab == tabLocal {
-			m.tab = tabRemote
-		} else {
-			m.tab = tabLocal
-		}
+		m.toggleTab()
 		return nil
 	}
 

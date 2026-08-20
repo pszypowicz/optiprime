@@ -11,6 +11,10 @@ import (
 // chromeLines: border(2) + header(1) + tabs(1) + blank(1) + list-hdr(1) + blank(1) + footer(1) + 1 for safety.
 const chromeLines = 9
 
+// remoteOffNotice explains the degraded git-only mode. Shown in the header
+// and flashed when the Remote tab is requested without a PAT.
+const remoteOffNotice = "remote features off - AZURE_DEVOPS_EXT_PAT not set"
+
 func (m model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return ""
@@ -61,10 +65,16 @@ func (m model) viewportHeight() int {
 
 func (m model) renderHeader() string {
 	title := titleStyle.Render(" optiprime ")
-	meta := headerStyle.Render(fmt.Sprintf(" %s / %s   %s", m.cfg.Org, m.cfg.Project, m.cfg.ScopeRoot))
-	head := title + meta
+	scope := " " + m.cfg.ScopeRoot
+	if m.cfg.Org != "" || m.cfg.Project != "" {
+		scope = fmt.Sprintf(" %s / %s   %s", m.cfg.Org, m.cfg.Project, m.cfg.ScopeRoot)
+	}
+	head := title + headerStyle.Render(scope)
 
 	extras := []string{}
+	if !m.remoteEnabled() {
+		extras = append(extras, mutedStyle.Render(remoteOffNotice))
+	}
 	if m.flash != "" {
 		extras = append(extras, mutedStyle.Render(m.flash))
 	}
@@ -84,6 +94,9 @@ func (m model) renderHeader() string {
 func (m model) renderTabs() string {
 	local := fmt.Sprintf("Local (%d)", len(m.locals))
 	remote := fmt.Sprintf("Remote (%d)", len(m.remotes))
+	if !m.remoteEnabled() {
+		remote = "Remote (off)"
+	}
 	var tabs string
 	if m.tab == tabLocal {
 		tabs = tabActive.Render(local) + " " + tabInactive.Render(remote)
@@ -121,7 +134,11 @@ func (m model) scrollRangeText() string {
 func (m model) renderFooter() string {
 	var keys string
 	if m.tab == tabLocal {
-		keys = "[space] toggle  [a] ff-ready  [n] none  [u] update  [i] info  [l] lazygit  [tab] remote  [r] refresh  [q] quit"
+		remoteKey := "[tab] remote  "
+		if !m.remoteEnabled() {
+			remoteKey = ""
+		}
+		keys = "[space] toggle  [a] ff-ready  [n] none  [u] update  [i] info  [l] lazygit  " + remoteKey + "[r] refresh  [q] quit"
 	} else {
 		keys = "[enter] clone via SSH  [tab] local  [r] refresh  [q] quit"
 	}

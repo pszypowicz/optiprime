@@ -6,6 +6,20 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// toggleTab switches between the Local and the Remote tab. When the remote
+// features are off, it stays on Local and explains why.
+func (m *model) toggleTab() {
+	if m.tab == tabRemote {
+		m.tab = tabLocal
+		return
+	}
+	if !m.remoteEnabled() {
+		m.flash = remoteOffNotice
+		return
+	}
+	m.tab = tabRemote
+}
+
 func (m *model) moveCursor(delta int) {
 	n := m.itemCount()
 	if n == 0 {
@@ -137,7 +151,9 @@ func (m *model) startFetchesIfReady() tea.Cmd {
 }
 
 func (m *model) canSkipFetch(name string, remoteMap map[string]*remoteItem) bool {
-	if m.remoteListErr != "" {
+	// Without the ADO repo list a missing entry means "unknown", not
+	// "orphan" - every repo still gets a real fetch.
+	if !m.remoteEnabled() || m.remoteListErr != "" {
 		return false
 	}
 	if strings.HasSuffix(name, ".wiki") {

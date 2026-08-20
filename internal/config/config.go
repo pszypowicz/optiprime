@@ -14,22 +14,24 @@ type Config struct {
 	ScopeRoot string
 }
 
-var ErrMissingEnv = errors.New("required env var not set")
+// RemoteEnabled reports whether the ADO REST features (repo list, PR
+// counts) are available. They need the PAT; everything else is plain git.
+func (c *Config) RemoteEnabled() bool {
+	return c.PAT != ""
+}
 
 // ErrScopeUnresolved: org or project is neither set in the environment nor
 // derivable from the origin remotes of the repos in the scope.
 var ErrScopeUnresolved = errors.New("cannot resolve ADO scope")
 
-// Load resolves the runtime configuration. Only AZURE_DEVOPS_EXT_PAT is
-// required. ADO_ORG and ADO_PROJECT act as overrides; when either is unset
-// it is derived from the ADO origin remotes of the git repos directly under
-// the working directory. Derivation fails when no ADO remote exists or when
-// the remotes disagree.
+// Load resolves the runtime configuration. No env var is required.
+// AZURE_DEVOPS_EXT_PAT enables the ADO REST features; without it the tool
+// runs in git-only mode. When the PAT is set, ADO_ORG and ADO_PROJECT act
+// as overrides; when either is unset it is derived from the ADO origin
+// remotes of the git repos directly under the working directory.
+// Derivation fails when no ADO remote exists or when the remotes disagree.
 func Load() (*Config, error) {
 	pat := os.Getenv("AZURE_DEVOPS_EXT_PAT")
-	if pat == "" {
-		return nil, fmt.Errorf("%w: [AZURE_DEVOPS_EXT_PAT]", ErrMissingEnv)
-	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -39,7 +41,9 @@ func Load() (*Config, error) {
 	org := os.Getenv("ADO_ORG")
 	project := os.Getenv("ADO_PROJECT")
 
-	if org == "" || project == "" {
+	// The org and the project only feed the REST client, so without a PAT
+	// there is nothing to resolve and no reason to fail.
+	if pat != "" && (org == "" || project == "") {
 		remotes := scopeRemotes(cwd)
 		if org == "" {
 			org, err = uniqueField(remotes, "organization", "ADO_ORG", cwd,
