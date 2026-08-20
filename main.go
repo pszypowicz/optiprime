@@ -7,9 +7,9 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/pszypowicz/optiprime-sync/internal/applog"
-	"github.com/pszypowicz/optiprime-sync/internal/config"
-	"github.com/pszypowicz/optiprime-sync/internal/tui"
+	"github.com/pszypowicz/optiprime/internal/applog"
+	"github.com/pszypowicz/optiprime/internal/config"
+	"github.com/pszypowicz/optiprime/internal/tui"
 )
 
 // version is overridable at build time via -ldflags "-X main.version=...".
@@ -26,7 +26,7 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		if errors.Is(err, config.ErrMissingEnv) {
-			fmt.Fprintln(os.Stderr, "optiprime-sync:", err)
+			fmt.Fprintln(os.Stderr, "optiprime:", err)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Required env vars:")
 			fmt.Fprintln(os.Stderr, "  AZURE_DEVOPS_EXT_PAT  - Personal Access Token with Code (read) scope")
@@ -37,22 +37,22 @@ func main() {
 			os.Exit(2)
 		}
 		if errors.Is(err, config.ErrScopeUnresolved) {
-			fmt.Fprintln(os.Stderr, "optiprime-sync:", err)
+			fmt.Fprintln(os.Stderr, "optiprime:", err)
 			os.Exit(2)
 		}
-		fmt.Fprintln(os.Stderr, "optiprime-sync:", err)
+		fmt.Fprintln(os.Stderr, "optiprime:", err)
 		os.Exit(1)
 	}
 
 	// Best-effort: if the log can't be opened we still want the TUI to run.
 	if logPath, err := applog.Init(); err != nil {
-		fmt.Fprintf(os.Stderr, "optiprime-sync: could not open log at %s: %v\n", logPath, err)
+		fmt.Fprintf(os.Stderr, "optiprime: could not open log at %s: %v\n", logPath, err)
 	}
-	applog.Infof("start", "", "optiprime-sync started; log path=%s", applog.Path())
+	applog.Infof("start", "", "optiprime started; log path=%s", applog.Path())
 
 	if err := tui.Run(cfg); err != nil {
 		applog.Errorf("tui", "", "run failed: %v", err)
-		fmt.Fprintln(os.Stderr, "optiprime-sync:", err)
+		fmt.Fprintln(os.Stderr, "optiprime:", err)
 		fmt.Fprintln(os.Stderr, "see", applog.Path(), "for details")
 		os.Exit(1)
 	}

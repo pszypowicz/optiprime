@@ -1,15 +1,15 @@
 version: 2
 
-project_name: optiprime-sync
+project_name: optiprime
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - id: optiprime-sync
+  - id: optiprime
     main: ./
-    binary: optiprime-sync
+    binary: optiprime
     env:
       - CGO_ENABLED=0
     goos:

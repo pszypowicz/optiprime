@@ -2,7 +2,7 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/pszypowicz/optiprime-sync/internal/config"
+	"github.com/pszypowicz/optiprime/internal/config"
 )
 
 func Run(cfg *config.Config) error {

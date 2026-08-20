@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/pszypowicz/optiprime-sync/internal/gitops"
+	"github.com/pszypowicz/optiprime/internal/gitops"
 )
 
 type contentWidths struct {

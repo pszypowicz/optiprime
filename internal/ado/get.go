@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pszypowicz/optiprime-sync/internal/applog"
+	"github.com/pszypowicz/optiprime/internal/applog"
 )
 
 // get hits BaseURL + orgPath with the given query. orgPath must start with "/"

@@ -4,8 +4,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pszypowicz/optiprime-sync/internal/gitops"
-	"github.com/pszypowicz/optiprime-sync/internal/scanner"
+	"github.com/pszypowicz/optiprime/internal/gitops"
+	"github.com/pszypowicz/optiprime/internal/scanner"
 )
 
 // adoRemote is an origin URL parsed into ADO coordinates.

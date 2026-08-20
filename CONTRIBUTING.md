@@ -5,9 +5,9 @@
 Requirements: Go (see `go.mod` for the minimum version), `git`, `ssh`.
 
 ```sh
-git clone git@github.com:pszypowicz/optiprime-sync.git
-cd optiprime-sync
-go build -o optiprime-sync .
+git clone git@github.com:pszypowicz/optiprime.git
+cd optiprime
+go build -o optiprime .
 ```
 
 ## Running tests
@@ -19,15 +19,17 @@ go test ./...
 Run the same checks CI runs:
 
 ```sh
-go vet ./...
-test -z "$(gofmt -l .)"
-go test ./...
+.github/scripts/checks.sh
 ```
+
+The script runs `gofmt`, `go vet`, `go mod tidy -diff`, `go build`, and
+`go test` over the whole module.
 
 ## Pre-commit hook
 
-A hook at `.githooks/pre-commit` runs `gofmt` against staged Go files, then
-`go vet` and `go test` over the whole module. Enable it once per clone:
+A hook at `.githooks/pre-commit` runs `.github/scripts/checks.sh`, the same
+script CI runs. It skips commits that touch no Go file. Enable it once per
+clone:
 
 ```sh
 git config core.hooksPath .githooks

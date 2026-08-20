@@ -1,4 +1,4 @@
-module github.com/pszypowicz/optiprime-sync
+module github.com/pszypowicz/optiprime
 
 go 1.24.2
 

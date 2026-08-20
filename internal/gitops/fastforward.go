@@ -3,7 +3,7 @@ package gitops
 import (
 	"fmt"
 
-	"github.com/pszypowicz/optiprime-sync/internal/applog"
+	"github.com/pszypowicz/optiprime/internal/applog"
 )
 
 func FastForward(dir string) error { return fastForward(defaultRunner, dir) }

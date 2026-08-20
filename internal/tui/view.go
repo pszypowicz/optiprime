@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/pszypowicz/optiprime-sync/internal/applog"
+	"github.com/pszypowicz/optiprime/internal/applog"
 )
 
 // chromeLines: border(2) + header(1) + tabs(1) + blank(1) + list-hdr(1) + blank(1) + footer(1) + 1 for safety.
@@ -60,7 +60,7 @@ func (m model) viewportHeight() int {
 }
 
 func (m model) renderHeader() string {
-	title := titleStyle.Render(" optiprime-sync ")
+	title := titleStyle.Render(" optiprime ")
 	meta := headerStyle.Render(fmt.Sprintf(" %s / %s   %s", m.cfg.Org, m.cfg.Project, m.cfg.ScopeRoot))
 	head := title + meta
 

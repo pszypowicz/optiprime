@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pszypowicz/optiprime-sync/internal/applog"
+	"github.com/pszypowicz/optiprime/internal/applog"
 )
 
 func Clone(sshURL, dest string) error { return clone(defaultRunner, sshURL, dest) }

@@ -1,5 +1,5 @@
-/optiprime-sync
-/optiprime-sync.exe
+/optiprime
+/optiprime.exe
 *.test
 *.out
 dist/
