@@ -25,17 +25,6 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		if errors.Is(err, config.ErrMissingEnv) {
-			fmt.Fprintln(os.Stderr, "optiprime:", err)
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Required env vars:")
-			fmt.Fprintln(os.Stderr, "  AZURE_DEVOPS_EXT_PAT  - Personal Access Token with Code (read) scope")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Optional overrides (derived from the origin remotes in scope when unset):")
-			fmt.Fprintln(os.Stderr, "  ADO_ORG               - Azure DevOps organization name")
-			fmt.Fprintln(os.Stderr, "  ADO_PROJECT           - Azure DevOps project name")
-			os.Exit(2)
-		}
 		if errors.Is(err, config.ErrScopeUnresolved) {
 			fmt.Fprintln(os.Stderr, "optiprime:", err)
 			os.Exit(2)

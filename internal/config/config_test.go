@@ -56,15 +56,41 @@ func TestLoad_AllOverridesSet(t *testing.T) {
 	assert.Equal(t, dir, cfg.ScopeRoot)
 }
 
-func TestLoad_MissingPAT(t *testing.T) {
-	setEnv(t, "foo-org", "bar-project", "")
+func TestLoad_NoPAT_RemoteFeaturesOff(t *testing.T) {
+	setEnv(t, "", "", "")
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	cfg, err := config.Load()
+	require.NoError(t, err)
+
+	assert.False(t, cfg.RemoteEnabled())
+	assert.Empty(t, cfg.Org)
+	assert.Empty(t, cfg.Project)
+	assert.Equal(t, dir, cfg.ScopeRoot)
+}
+
+// Without a PAT the org and the project are never used, so Load must not
+// fail on remotes that disagree - derivation is skipped entirely.
+func TestLoad_NoPAT_SkipsDerivation(t *testing.T) {
+	setEnv(t, "", "", "")
+	dir := t.TempDir()
+	initRepo(t, dir, "repo-a", "git@ssh.dev.azure.com:v3/org-one/proj/a")
+	initRepo(t, dir, "repo-b", "git@ssh.dev.azure.com:v3/org-two/proj/b")
+	t.Chdir(dir)
+
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	assert.False(t, cfg.RemoteEnabled())
+}
+
+func TestLoad_WithPAT_RemoteFeaturesOn(t *testing.T) {
+	setEnv(t, "foo-org", "bar-project", "pat-xyz")
 	t.Chdir(t.TempDir())
 
 	cfg, err := config.Load()
-	require.Error(t, err)
-	assert.Nil(t, cfg)
-	assert.True(t, errors.Is(err, config.ErrMissingEnv))
-	assert.Contains(t, err.Error(), "AZURE_DEVOPS_EXT_PAT")
+	require.NoError(t, err)
+	assert.True(t, cfg.RemoteEnabled())
 }
 
 func TestLoad_DerivesFromRemotes(t *testing.T) {

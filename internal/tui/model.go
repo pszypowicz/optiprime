@@ -72,22 +72,33 @@ type model struct {
 func newModel(cfg *config.Config) model {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	return model{
-		cfg:            cfg,
-		adoClient:      ado.NewClient(cfg.Org, cfg.Project, cfg.PAT),
-		spinner:        sp,
-		loadingLocals:  true,
-		loadingRemotes: true,
-		loadingPRs:     true,
-		sem:            make(chan struct{}, maxParallel),
+	m := model{
+		cfg:           cfg,
+		spinner:       sp,
+		loadingLocals: true,
+		sem:           make(chan struct{}, maxParallel),
 	}
+	// Without a PAT the REST features (Remote tab, PR counts) are off and
+	// their loading flags must stay false - nothing will ever clear them.
+	if cfg.RemoteEnabled() {
+		m.adoClient = ado.NewClient(cfg.Org, cfg.Project, cfg.PAT)
+		m.loadingRemotes = true
+		m.loadingPRs = true
+	}
+	return m
+}
+
+func (m model) remoteEnabled() bool {
+	return m.adoClient != nil
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		m.spinner.Tick,
 		scanLocalsCmd(m.cfg.ScopeRoot),
-		listRemotesCmd(m.adoClient),
-		fetchPRsCmd(m.adoClient),
-	)
+	}
+	if m.remoteEnabled() {
+		cmds = append(cmds, listRemotesCmd(m.adoClient), fetchPRsCmd(m.adoClient))
+	}
+	return tea.Batch(cmds...)
 }
