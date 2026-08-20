@@ -1,3 +1,4 @@
-// Package config loads and validates the env-var configuration the
-// optiprime-sync binary needs at startup.
+// Package config resolves the startup configuration: the PAT from the
+// environment, and the ADO org and project from the environment or from
+// the origin remotes of the repos in the scope directory.
 package config
