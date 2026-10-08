@@ -3,7 +3,7 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 func (m model) renderLocal() string {
@@ -11,10 +11,10 @@ func (m model) renderLocal() string {
 		return "  " + m.spinner.View() + " scanning " + m.cfg.ScopeRoot
 	}
 	if m.scanErr != "" {
-		return "  " + errStyle.Render("scan error: "+sanitizeInline(m.scanErr))
+		return "  " + m.styles.err.Render("scan error: "+sanitizeInline(m.scanErr))
 	}
 	if len(m.locals) == 0 {
-		return mutedStyle.Render("  no git repos found in scope root")
+		return m.styles.muted.Render("  no git repos found in scope root")
 	}
 
 	remoteMap := m.remoteByName()
@@ -29,7 +29,7 @@ func (m model) renderLocal() string {
 
 	// Measure only the rows we're about to render so dynamic sizing matches
 	// what's actually on screen (scrolling doesn't shift column widths).
-	widths := measureLocalWidths(m.locals[start:end], remoteMap)
+	widths := m.measureLocalWidths(m.locals[start:end], remoteMap)
 	L := computeLayout(m.width, widths)
 
 	rows := []string{m.renderLocalHeader(L)}
@@ -48,13 +48,13 @@ func (m model) renderLocal() string {
 func (m model) emptyStripedRow(virtualIdx int) string {
 	blank := strings.Repeat(" ", m.innerWidth())
 	if virtualIdx%2 == 1 {
-		return applyRowBg(blank, zebraStyle)
+		return applyRowBg(blank, m.styles.zebra)
 	}
 	return blank
 }
 
 func (m model) renderLocalHeader(L layout) string {
-	return tableHeaderStyle.Render(
+	return m.styles.tableHeader.Render(
 		cell(colCursorW, "") +
 			cell(colCheckW, "") +
 			cell(L.name, "repo") +
@@ -78,17 +78,17 @@ func (m model) renderLocalRow(i int, L layout, remoteMap map[string]*remoteItem)
 	var branchCell, glyphCell, stateCell string
 	switch {
 	case it.Loading:
-		branchCell = mutedStyle.Render(m.spinner.View() + " fetching")
-		glyphCell = mutedStyle.Render("-")
-		stateCell = mutedStyle.Render("fetching")
+		branchCell = m.styles.muted.Render(m.spinner.View() + " fetching")
+		glyphCell = m.styles.muted.Render("-")
+		stateCell = m.styles.muted.Render("fetching")
 	case it.Err != "":
-		branchCell = mutedStyle.Render("-")
-		glyphCell = mutedStyle.Render("-")
-		stateCell = errStyle.Render(it.Err)
+		branchCell = m.styles.muted.Render("-")
+		glyphCell = m.styles.muted.Render("-")
+		stateCell = m.styles.err.Render(it.Err)
 	default:
-		branchCell = renderBranch(it.Status)
-		glyphCell = renderGlyphs(it.Status, it.PRCount)
-		stateCell = renderLocalState(it, remoteMap)
+		branchCell = m.renderBranch(it.Status)
+		glyphCell = m.renderGlyphs(it.Status, it.PRCount)
+		stateCell = m.renderLocalState(it, remoteMap)
 	}
 
 	row := cell(colCursorW, cursor) +
@@ -100,15 +100,15 @@ func (m model) renderLocalRow(i int, L layout, remoteMap map[string]*remoteItem)
 
 	switch {
 	case i == m.localCursor:
-		return applyRowBg(row, rowSelected)
+		return applyRowBg(row, m.styles.rowSelected)
 	case i%2 == 1:
-		return applyRowBg(row, zebraStyle)
+		return applyRowBg(row, m.styles.zebra)
 	default:
 		return row
 	}
 }
 
-func measureLocalWidths(items []*localItem, rm map[string]*remoteItem) contentWidths {
+func (m model) measureLocalWidths(items []*localItem, rm map[string]*remoteItem) contentWidths {
 	w := contentWidths{}
 	for _, it := range items {
 		w.name = maxi(w.name, lipgloss.Width(it.Name))
@@ -123,9 +123,9 @@ func measureLocalWidths(items []*localItem, rm map[string]*remoteItem) contentWi
 			gcell = "-"
 			scell = sanitizeInline(it.Err)
 		default:
-			bcell = renderBranch(it.Status)
-			gcell = renderGlyphs(it.Status, it.PRCount)
-			scell = renderLocalState(it, rm)
+			bcell = m.renderBranch(it.Status)
+			gcell = m.renderGlyphs(it.Status, it.PRCount)
+			scell = m.renderLocalState(it, rm)
 		}
 		w.branch = maxi(w.branch, lipgloss.Width(bcell))
 		w.glyph = maxi(w.glyph, lipgloss.Width(gcell))

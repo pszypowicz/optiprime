@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/pszypowicz/optiprime/internal/gitops"
 )
 
@@ -19,40 +19,40 @@ func (m model) renderDetailsOverlay() string {
 		d = m.detailsCache[it.Name]
 	}
 
-	title := tableHeaderStyle.Render(fmt.Sprintf("Details · %s", it.Name))
-	hint := mutedStyle.Render("[esc/i] close")
+	title := m.styles.tableHeader.Render(fmt.Sprintf("Details · %s", it.Name))
+	hint := m.styles.muted.Render("[esc/i] close")
 
 	lines := []string{title + "    " + hint, ""}
 
 	if d == nil {
-		lines = append(lines, mutedStyle.Render(m.spinner.View()+" loading..."))
-		return overlayStyle.Render(strings.Join(lines, "\n"))
+		lines = append(lines, m.styles.muted.Render(m.spinner.View()+" loading..."))
+		return m.styles.overlay.Render(strings.Join(lines, "\n"))
 	}
 
 	s := it.Status
 	branchLine := s.Branch
 	if s.Upstream != "" {
-		branchLine += mutedStyle.Render(" → ") + s.Upstream
+		branchLine += m.styles.muted.Render(" → ") + s.Upstream
 	}
 	if !s.BranchIsDefault {
-		branchLine += mutedStyle.Render(fmt.Sprintf("   (default: %s)", s.DefaultBranch))
+		branchLine += m.styles.muted.Render(fmt.Sprintf("   (default: %s)", s.DefaultBranch))
 	}
-	lines = append(lines, field("Branch", branchLine))
+	lines = append(lines, m.field("Branch", branchLine))
 
 	if d.LastCommitSHA != "" {
 		commit := fmt.Sprintf("%s  %s  %s(%s, %s)",
-			okStyle.Render(d.LastCommitSHA),
+			m.styles.ok.Render(d.LastCommitSHA),
 			d.LastCommitSubject,
-			mutedStyle.Render(""),
+			m.styles.muted.Render(""),
 			d.LastCommitAge,
 			d.LastCommitAuthor,
 		)
-		lines = append(lines, field("Commit", commit))
+		lines = append(lines, m.field("Commit", commit))
 	}
 
 	if len(d.DirtyFiles) > 0 {
 		first := d.DirtyFiles[0]
-		lines = append(lines, field("Dirty", fmt.Sprintf("%s %s", warnStyle.Render(first.XY), first.Path)))
+		lines = append(lines, m.field("Dirty", fmt.Sprintf("%s %s", m.styles.warn.Render(first.XY), first.Path)))
 		more := len(d.DirtyFiles) - 1
 		max := 3
 		if more < max {
@@ -60,19 +60,19 @@ func (m model) renderDetailsOverlay() string {
 		}
 		for i := 1; i <= max; i++ {
 			f := d.DirtyFiles[i]
-			lines = append(lines, field("", fmt.Sprintf("%s %s", warnStyle.Render(f.XY), f.Path)))
+			lines = append(lines, m.field("", fmt.Sprintf("%s %s", m.styles.warn.Render(f.XY), f.Path)))
 		}
 		if more > 3 {
-			lines = append(lines, field("", mutedStyle.Render(fmt.Sprintf("+%d more", more-3))))
+			lines = append(lines, m.field("", m.styles.muted.Render(fmt.Sprintf("+%d more", more-3))))
 		}
 	}
 
 	if len(d.Stashes) > 0 {
 		first := d.Stashes[0]
-		line := fmt.Sprintf("%s  %s  %s", mutedStyle.Render(first.Ref), first.Subject, mutedStyle.Render("("+first.Age+")"))
-		lines = append(lines, field("Stash", line))
+		line := fmt.Sprintf("%s  %s  %s", m.styles.muted.Render(first.Ref), first.Subject, m.styles.muted.Render("("+first.Age+")"))
+		lines = append(lines, m.field("Stash", line))
 		if extra := len(d.Stashes) - 1; extra > 0 {
-			lines = append(lines, field("", mutedStyle.Render(fmt.Sprintf("+%d more", extra))))
+			lines = append(lines, m.field("", m.styles.muted.Render(fmt.Sprintf("+%d more", extra))))
 		}
 	}
 
@@ -87,13 +87,13 @@ func (m model) renderDetailsOverlay() string {
 		sshURL = d.RemoteURL
 	}
 	if sshURL != "" {
-		lines = append(lines, field("SSH", mutedStyle.Render(sshURL)))
+		lines = append(lines, m.field("SSH", m.styles.muted.Render(sshURL)))
 	}
 	if webURL != "" {
-		lines = append(lines, field("Web", mutedStyle.Render(webURL)))
+		lines = append(lines, m.field("Web", m.styles.muted.Render(webURL)))
 	}
 
-	return overlayStyle.Render(strings.Join(lines, "\n"))
+	return m.styles.overlay.Render(strings.Join(lines, "\n"))
 }
 
 // composeOverlay splices a small pre-rendered overlay into the center of
@@ -143,9 +143,9 @@ func composeOverlay(list, overlay string, innerWidth int) string {
 }
 
 // field formats one labeled line of the details panel.
-func field(label, value string) string {
+func (m model) field(label, value string) string {
 	if label == "" {
 		return "           " + value
 	}
-	return mutedStyle.Render(fmt.Sprintf("%-10s", label)) + " " + value
+	return m.styles.muted.Render(fmt.Sprintf("%-10s", label)) + " " + value
 }

@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 	"github.com/pszypowicz/optiprime/internal/ado"
 	"github.com/pszypowicz/optiprime/internal/config"
 	"github.com/pszypowicz/optiprime/internal/gitops"
@@ -48,6 +48,7 @@ type model struct {
 	remoteScroll   int
 	width, height  int
 	spinner        spinner.Model
+	styles         styles
 	scanErr        string
 	remoteListErr  string
 	prErr          string
@@ -70,13 +71,14 @@ type model struct {
 }
 
 func newModel(cfg *config.Config) model {
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
 	m := model{
 		cfg:           cfg,
-		spinner:       sp,
+		spinner:       spinner.New(spinner.WithSpinner(spinner.Dot)),
 		loadingLocals: true,
 		sem:           make(chan struct{}, maxParallel),
+		// Dark until the terminal answers the background query in Init. A
+		// terminal that never answers keeps the dark palette.
+		styles: newStyles(true),
 	}
 	// Without a PAT the REST features (Remote tab, PR counts) are off and
 	// their loading flags must stay false - nothing will ever clear them.
@@ -94,6 +96,7 @@ func (m model) remoteEnabled() bool {
 
 func (m model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
+		tea.RequestBackgroundColor,
 		m.spinner.Tick,
 		scanLocalsCmd(m.cfg.ScopeRoot),
 	}

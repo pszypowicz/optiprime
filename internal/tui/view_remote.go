@@ -3,7 +3,7 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 func (m model) renderRemote() string {
@@ -11,10 +11,10 @@ func (m model) renderRemote() string {
 		return "  " + m.spinner.View() + " listing " + m.cfg.Org + "/" + m.cfg.Project + " via ADO REST"
 	}
 	if m.remoteListErr != "" {
-		return "  " + errStyle.Render("ADO error: "+sanitizeInline(m.remoteListErr))
+		return "  " + m.styles.err.Render("ADO error: "+sanitizeInline(m.remoteListErr))
 	}
 	if len(m.remotes) == 0 {
-		return mutedStyle.Render("  no repos returned from ADO")
+		return m.styles.muted.Render("  no repos returned from ADO")
 	}
 
 	vh := m.viewportHeight()
@@ -33,7 +33,7 @@ func (m model) renderRemote() string {
 		sshW = 20
 	}
 
-	hdr := tableHeaderStyle.Render(
+	hdr := m.styles.tableHeader.Render(
 		cell(colCursorW, "") +
 			cell(colCheckW, "") +
 			cell(L.name, "repo") +
@@ -63,33 +63,33 @@ func (m model) renderRemoteRow(i int, L layout, sshW int) string {
 	switch {
 	case it.Cloning:
 		marker = "*"
-		state = mutedStyle.Render(m.spinner.View() + " cloning")
+		state = m.styles.muted.Render(m.spinner.View() + " cloning")
 	case it.Cloned:
 		marker = "✓"
-		state = okStyle.Render("cloned")
+		state = m.styles.ok.Render("cloned")
 	case it.Repo.Disabled:
 		marker = "-"
-		state = mutedStyle.Render("disabled upstream")
+		state = m.styles.muted.Render("disabled upstream")
 	default:
-		state = warnStyle.Render("not cloned")
+		state = m.styles.warn.Render("not cloned")
 	}
 	if it.Err != "" {
-		state = errStyle.Render(it.Err)
+		state = m.styles.err.Render(it.Err)
 	} else if it.Message != "" {
-		state = okStyle.Render(it.Message)
+		state = m.styles.ok.Render(it.Message)
 	}
 
 	row := cell(colCursorW, cursor) +
-		cell(colCheckW, mutedStyle.Render(marker)) +
+		cell(colCheckW, m.styles.muted.Render(marker)) +
 		cell(L.name, it.Repo.Name) +
 		cell(L.branch, state) +
-		cell(sshW, mutedStyle.Render(it.Repo.SSHURL))
+		cell(sshW, m.styles.muted.Render(it.Repo.SSHURL))
 
 	switch {
 	case i == m.remoteCursor:
-		return applyRowBg(row, rowSelected)
+		return applyRowBg(row, m.styles.rowSelected)
 	case i%2 == 1:
-		return applyRowBg(row, zebraStyle)
+		return applyRowBg(row, m.styles.zebra)
 	default:
 		return row
 	}
