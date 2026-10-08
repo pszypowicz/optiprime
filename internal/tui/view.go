@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/pszypowicz/optiprime/internal/applog"
 )
@@ -15,7 +16,14 @@ const chromeLines = 9
 // and flashed when the Remote tab is requested without a PAT.
 const remoteOffNotice = "remote features off - AZURE_DEVOPS_EXT_PAT not set"
 
-func (m model) View() string {
+func (m model) View() tea.View {
+	v := tea.NewView(m.render())
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
+}
+
+func (m model) render() string {
 	if m.width == 0 || m.height == 0 {
 		return ""
 	}
@@ -40,10 +48,10 @@ func (m model) View() string {
 	b.WriteString("\n\n")
 	b.WriteString(m.renderFooter())
 	// Explicit width/height so the border hugs the terminal, not the widest
-	// line. -2 accounts for the left+right / top+bottom border glyphs.
-	return boxStyle.
-		Width(m.width - 2).
-		Height(m.height - 2).
+	// line. Both sizes include the border glyphs.
+	return m.styles.box.
+		Width(m.width).
+		Height(m.height).
 		Render(b.String())
 }
 
@@ -64,25 +72,25 @@ func (m model) viewportHeight() int {
 }
 
 func (m model) renderHeader() string {
-	title := titleStyle.Render(" optiprime ")
+	title := m.styles.title.Render(" optiprime ")
 	scope := " " + m.cfg.ScopeRoot
 	if m.cfg.Org != "" || m.cfg.Project != "" {
 		scope = fmt.Sprintf(" %s / %s   %s", m.cfg.Org, m.cfg.Project, m.cfg.ScopeRoot)
 	}
-	head := title + headerStyle.Render(scope)
+	head := title + m.styles.header.Render(scope)
 
 	extras := []string{}
 	if !m.remoteEnabled() {
-		extras = append(extras, mutedStyle.Render(remoteOffNotice))
+		extras = append(extras, m.styles.muted.Render(remoteOffNotice))
 	}
 	if m.flash != "" {
-		extras = append(extras, mutedStyle.Render(m.flash))
+		extras = append(extras, m.styles.muted.Render(m.flash))
 	}
 	if m.prErr != "" {
-		extras = append(extras, warnStyle.Render("PRs: "+m.prErr))
+		extras = append(extras, m.styles.warn.Render("PRs: "+m.prErr))
 	}
 	if m.prErr != "" || m.remoteListErr != "" || m.scanErr != "" {
-		extras = append(extras, mutedStyle.Render("log: "+applog.Path()))
+		extras = append(extras, m.styles.muted.Render("log: "+applog.Path()))
 	}
 	if len(extras) > 0 {
 		head += "   " + strings.Join(extras, "   ")
@@ -99,12 +107,12 @@ func (m model) renderTabs() string {
 	}
 	var tabs string
 	if m.tab == tabLocal {
-		tabs = tabActive.Render(local) + " " + tabInactive.Render(remote)
+		tabs = m.styles.tabActive.Render(local) + " " + m.styles.tabInactive.Render(remote)
 	} else {
-		tabs = tabInactive.Render(local) + " " + tabActive.Render(remote)
+		tabs = m.styles.tabInactive.Render(local) + " " + m.styles.tabActive.Render(remote)
 	}
 	if r := m.scrollRangeText(); r != "" {
-		tabs += "   " + mutedStyle.Render(r)
+		tabs += "   " + m.styles.muted.Render(r)
 	}
 	return tabs
 }
@@ -142,5 +150,5 @@ func (m model) renderFooter() string {
 	} else {
 		keys = "[enter] clone via SSH  [tab] local  [r] refresh  [q] quit"
 	}
-	return ansi.Truncate(helpStyle.Render(keys), m.innerWidth(), "…")
+	return ansi.Truncate(m.styles.help.Render(keys), m.innerWidth(), "…")
 }

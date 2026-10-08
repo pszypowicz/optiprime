@@ -1,78 +1,89 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import "charm.land/lipgloss/v2"
 
-// All colors are AdaptiveColor pairs so the UI picks the right shade for the
-// terminal's background. Lipgloss auto-detects dark vs. light at startup;
-// falls back to Dark if detection fails.
-var (
-	colorAccent  = lipgloss.AdaptiveColor{Light: "#5A3FA0", Dark: "#7D56F4"}
-	colorSubtle  = lipgloss.AdaptiveColor{Light: "240", Dark: "241"}
-	colorOK      = lipgloss.AdaptiveColor{Light: "28", Dark: "42"}
-	colorWarn    = lipgloss.AdaptiveColor{Light: "130", Dark: "214"}
-	colorErr     = lipgloss.AdaptiveColor{Light: "160", Dark: "196"}
-	colorMuted   = lipgloss.AdaptiveColor{Light: "245", Dark: "244"}
-	colorHeading = lipgloss.AdaptiveColor{Light: "230", Dark: "229"}
-	colorPR      = lipgloss.AdaptiveColor{Light: "26", Dark: "39"}
+// styles holds every style the view uses. The model owns one set and
+// rebuilds it when the terminal reports its background color.
+type styles struct {
+	title, header          lipgloss.Style
+	tabActive, tabInactive lipgloss.Style
+	zebra, rowSelected     lipgloss.Style
+	ok, warn, err, muted   lipgloss.Style
+	pr, help               lipgloss.Style
+	tableHeader, box       lipgloss.Style
+	overlay                lipgloss.Style
+}
 
-	titleStyle = lipgloss.NewStyle().
+// newStyles builds the palette for a dark or a light terminal background.
+// Every style that sets a background also sets a foreground, so the text
+// color never depends on the terminal default.
+func newStyles(isDark bool) styles {
+	ld := lipgloss.LightDark(isDark)
+	pick := func(light, dark string) lipgloss.Style {
+		return lipgloss.NewStyle().Foreground(ld(lipgloss.Color(light), lipgloss.Color(dark)))
+	}
+
+	accent := ld(lipgloss.Color("#5A3FA0"), lipgloss.Color("#7D56F4"))
+	heading := ld(lipgloss.Color("230"), lipgloss.Color("229"))
+	text := ld(lipgloss.Color("235"), lipgloss.Color("252"))
+
+	return styles{
+		title: lipgloss.NewStyle().
 			Bold(true).
-			Foreground(colorHeading).
-			Background(colorAccent).
-			Padding(0, 1)
+			Foreground(heading).
+			Background(accent).
+			Padding(0, 1),
 
-	headerStyle = lipgloss.NewStyle().
-			Foreground(colorSubtle)
+		header: pick("240", "241"),
 
-	tabActive = lipgloss.NewStyle().
+		tabActive: lipgloss.NewStyle().
 			Bold(true).
-			Foreground(colorHeading).
-			Background(colorAccent).
-			Padding(0, 2)
+			Foreground(heading).
+			Background(accent).
+			Padding(0, 2),
 
-	tabInactive = lipgloss.NewStyle().
-			Foreground(colorMuted).
-			Padding(0, 2)
+		tabInactive: pick("245", "244").Padding(0, 2),
 
-	// Zebra stripes for alt rows - subtle enough that colored foregrounds stay readable.
-	zebraStyle = lipgloss.NewStyle().
-			Background(lipgloss.AdaptiveColor{Light: "254", Dark: "236"})
+		// Zebra stripes for alt rows - subtle enough that colored foregrounds stay readable.
+		zebra: lipgloss.NewStyle().
+			Foreground(text).
+			Background(ld(lipgloss.Color("254"), lipgloss.Color("236"))),
 
-	// Cursor row uses a stronger tint so it stands out even on a zebra row.
-	rowSelected = lipgloss.NewStyle().
+		// Cursor row uses a stronger tint so it stands out even on a zebra row.
+		rowSelected: lipgloss.NewStyle().
 			Bold(true).
-			Background(lipgloss.AdaptiveColor{Light: "252", Dark: "238"})
+			Foreground(text).
+			Background(ld(lipgloss.Color("252"), lipgloss.Color("238"))),
 
-	okStyle    = lipgloss.NewStyle().Foreground(colorOK)
-	warnStyle  = lipgloss.NewStyle().Foreground(colorWarn)
-	errStyle   = lipgloss.NewStyle().Foreground(colorErr)
-	mutedStyle = lipgloss.NewStyle().Foreground(colorMuted)
-	prStyle    = lipgloss.NewStyle().Foreground(colorPR).Bold(true)
-	helpStyle  = lipgloss.NewStyle().Foreground(colorSubtle)
+		ok:    pick("28", "42"),
+		warn:  pick("130", "214"),
+		err:   pick("160", "196"),
+		muted: pick("245", "244"),
+		pr:    pick("26", "39").Bold(true),
+		help:  pick("240", "241"),
 
-	// Bold + underlined header. Foreground is chosen for contrast against the
-	// terminal background, not against the accent color (which is what
-	// colorHeading is tuned for) - on a light terminal colorHeading is
-	// near-white and becomes invisible.
-	tableHeaderStyle = lipgloss.NewStyle().
-				Bold(true).
-				Underline(true).
-				Foreground(lipgloss.AdaptiveColor{Light: "235", Dark: "254"})
+		// Bold + underlined header. Foreground is chosen for contrast against
+		// the terminal background, not against the accent color (which is what
+		// heading is tuned for) - on a light terminal heading is near-white and
+		// becomes invisible.
+		tableHeader: pick("235", "254").Bold(true).Underline(true),
 
-	boxStyle = lipgloss.NewStyle().
+		box: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorAccent).
-			Padding(0, 1)
+			BorderForeground(accent).
+			Padding(0, 1),
 
-	overlayStyle = lipgloss.NewStyle().
+		overlay: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorAccent).
-			Background(lipgloss.AdaptiveColor{Light: "255", Dark: "234"}).
-			Padding(1, 2)
-)
+			BorderForeground(accent).
+			Foreground(text).
+			Background(ld(lipgloss.Color("255"), lipgloss.Color("234"))).
+			Padding(1, 2),
+	}
+}
 
 // Column width accounting. cursor+check are fixed; the other columns are
-// sized dynamically from actual content (see computeLayout in view.go).
+// sized dynamically from actual content (see computeLayout).
 const (
 	colCursorW = 2
 	colCheckW  = 4

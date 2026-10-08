@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/pszypowicz/optiprime/internal/gitops"
 )
 
@@ -17,20 +17,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.BackgroundColorMsg:
+		m.styles = newStyles(msg.IsDark())
+		return m, nil
+
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 
-	case tea.MouseMsg:
+	case tea.MouseWheelMsg:
 		switch msg.Button {
-		case tea.MouseButtonWheelUp:
+		case tea.MouseWheelUp:
 			m.scroll(-3)
-		case tea.MouseButtonWheelDown:
+		case tea.MouseWheelDown:
 			m.scroll(3)
-		case tea.MouseButtonLeft:
-			if msg.Action == tea.MouseActionPress {
-				cmd := m.handleClick(msg.X, msg.Y)
-				return m, cmd
-			}
+		}
+		return m, nil
+
+	case tea.MouseClickMsg:
+		if msg.Button == tea.MouseLeft {
+			return m, m.handleClick(msg.X, msg.Y)
 		}
 		return m, nil
 
@@ -117,18 +122,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, scanLocalsCmd(m.cfg.ScopeRoot)
 
 	case lazygitDoneMsg:
-		// lazygit resets terminal modes on exit, including mouse tracking.
-		// Re-enable it alongside any follow-up commands.
-		reenable := tea.EnableMouseCellMotion
 		if msg.err != nil {
 			m.flash = "lazygit: " + msg.err.Error()
-			return m, reenable
+			return m, nil
 		}
 		if it := m.findLocal(msg.name); it != nil {
 			it.Loading = true
 		}
 		m.flash = "re-fetching " + msg.name
-		return m, tea.Batch(reenable, fetchAndStatusCmd(m.sem, msg.name, msg.path))
+		return m, fetchAndStatusCmd(m.sem, msg.name, msg.path)
 
 	case detailsMsg:
 		delete(m.detailsLoading, msg.name)
@@ -162,7 +164,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m model) handleKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch k.String() {
 	case "ctrl+c", "q":
 		return m, tea.Quit
@@ -210,7 +212,7 @@ func (m model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ensureCursorVisible()
 		return m, m.ensureDetailsLoaded()
 
-	case " ":
+	case "space":
 		if m.tab == tabLocal && len(m.locals) > 0 {
 			it := m.locals[m.localCursor]
 			it.Selected = !it.Selected

@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"image/color"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/pszypowicz/optiprime/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -58,7 +60,7 @@ func TestRefresh_RemoteFeaturesOff_DoesNotWaitOnRemotes(t *testing.T) {
 func TestTabKey_BlockedWhenRemoteOff(t *testing.T) {
 	m := gitOnlyModel()
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	got, ok := updated.(model)
 	require.True(t, ok)
 
@@ -114,6 +116,75 @@ func TestRenderLocal_NoOrphanStateWhenRemoteOff(t *testing.T) {
 	m := gitOnlyModel()
 	it := &localItem{Name: "some-repo"}
 
-	state := renderLocalState(it, m.remoteByName())
+	state := m.renderLocalState(it, m.remoteByName())
 	assert.NotContains(t, state, "not in ADO")
+}
+
+func TestNewModel_DarkPaletteUntilBackgroundKnown(t *testing.T) {
+	m := gitOnlyModel()
+
+	assert.Equal(t, newStyles(true), m.styles)
+}
+
+func TestBackgroundColorMsg_PicksPalette(t *testing.T) {
+	cases := []struct {
+		name   string
+		bg     color.Color
+		isDark bool
+	}{
+		{"light terminal", color.White, false},
+		{"dark terminal", color.Black, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := gitOnlyModel()
+
+			updated, _ := m.Update(tea.BackgroundColorMsg{Color: tc.bg})
+			got, ok := updated.(model)
+			require.True(t, ok)
+
+			assert.Equal(t, newStyles(tc.isDark), got.styles)
+		})
+	}
+}
+
+func TestView_AltScreenAndMouse(t *testing.T) {
+	m := gitOnlyModel()
+
+	v := m.View()
+	assert.True(t, v.AltScreen)
+	assert.Equal(t, tea.MouseModeCellMotion, v.MouseMode)
+}
+
+func TestView_BoxFillsTerminal(t *testing.T) {
+	m := gitOnlyModel()
+	m.width = 80
+	m.height = 24
+
+	content := m.View().Content
+	assert.Equal(t, 80, lipgloss.Width(content))
+	assert.Equal(t, 24, lipgloss.Height(content))
+}
+
+func TestSpaceKey_TogglesSelection(t *testing.T) {
+	m := gitOnlyModel()
+	m.locals = []*localItem{{Name: "repo"}}
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
+	got, ok := updated.(model)
+	require.True(t, ok)
+
+	assert.True(t, got.locals[0].Selected)
+}
+
+func TestClickOnCheckbox_TogglesSelection(t *testing.T) {
+	m := gitOnlyModel()
+	m.locals = []*localItem{{Name: "repo"}}
+
+	// Y=5 is the first data row, X=4 is the first checkbox column.
+	updated, _ := m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: 4, Y: 5})
+	got, ok := updated.(model)
+	require.True(t, ok)
+
+	assert.True(t, got.locals[0].Selected)
 }

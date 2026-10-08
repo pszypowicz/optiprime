@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/pszypowicz/optiprime/internal/gitops"
 )
@@ -62,23 +62,20 @@ func (m model) remoteByName() map[string]*remoteItem {
 }
 
 // applyRowBg wraps a row in the given style's ANSI codes and re-applies them
-// after every inner "\x1b[0m" reset so the full row width carries the
-// background. lipgloss's default cell rendering emits a full reset after each
-// styled substring, which otherwise breaks an outer background partway across
-// the row.
+// after every inner ansi.ResetStyle so the full row width carries the
+// background. lipgloss emits a full reset after each styled substring, which
+// otherwise breaks an outer background partway across the row.
 func applyRowBg(row string, style lipgloss.Style) string {
 	prefix := styleOpenSequence(style)
 	if prefix == "" {
 		return row
 	}
-	row = strings.ReplaceAll(row, "\x1b[0m", "\x1b[0m"+prefix)
-	return prefix + row + "\x1b[0m"
+	row = strings.ReplaceAll(row, ansi.ResetStyle, ansi.ResetStyle+prefix)
+	return prefix + row + ansi.ResetStyle
 }
 
 // styleOpenSequence renders a probe character through the given style and
 // extracts the opening ANSI escape sequence (everything before the probe).
-// Runs the real renderer so adaptive colors resolve to the terminal's actual
-// palette codes.
 func styleOpenSequence(style lipgloss.Style) string {
 	const probe = "\x00"
 	out := style.Render(probe)
@@ -112,87 +109,87 @@ func sanitizeInline(s string) string {
 	return r.Replace(s)
 }
 
-func renderBranch(s gitops.Status) string {
+func (m model) renderBranch(s gitops.Status) string {
 	if s.Detached {
-		return warnStyle.Render("(detached)")
+		return m.styles.warn.Render("(detached)")
 	}
 	if !s.BranchIsDefault {
-		return warnStyle.Render(s.Branch) + mutedStyle.Render(" ["+s.DefaultBranch+"]")
+		return m.styles.warn.Render(s.Branch) + m.styles.muted.Render(" ["+s.DefaultBranch+"]")
 	}
 	return s.Branch
 }
 
-func renderGlyphs(s gitops.Status, prCount int) string {
+func (m model) renderGlyphs(s gitops.Status, prCount int) string {
 	var parts []string
 	if s.Ahead > 0 || s.Behind > 0 {
-		parts = append(parts, mutedStyle.Render(fmt.Sprintf("↑%d↓%d", s.Ahead, s.Behind)))
+		parts = append(parts, m.styles.muted.Render(fmt.Sprintf("↑%d↓%d", s.Ahead, s.Behind)))
 	}
 	if s.Staged > 0 {
-		parts = append(parts, okStyle.Render(fmt.Sprintf("+%d", s.Staged)))
+		parts = append(parts, m.styles.ok.Render(fmt.Sprintf("+%d", s.Staged)))
 	}
 	if s.Unstaged > 0 {
-		parts = append(parts, warnStyle.Render(fmt.Sprintf("~%d", s.Unstaged)))
+		parts = append(parts, m.styles.warn.Render(fmt.Sprintf("~%d", s.Unstaged)))
 	}
 	if s.Conflicts > 0 {
-		parts = append(parts, errStyle.Render(fmt.Sprintf("!%d", s.Conflicts)))
+		parts = append(parts, m.styles.err.Render(fmt.Sprintf("!%d", s.Conflicts)))
 	}
 	if s.Untracked > 0 {
-		parts = append(parts, mutedStyle.Render(fmt.Sprintf("?%d", s.Untracked)))
+		parts = append(parts, m.styles.muted.Render(fmt.Sprintf("?%d", s.Untracked)))
 	}
 	if s.Stashes > 0 {
-		parts = append(parts, mutedStyle.Render(fmt.Sprintf("⚑%d", s.Stashes)))
+		parts = append(parts, m.styles.muted.Render(fmt.Sprintf("⚑%d", s.Stashes)))
 	}
 	if s.InProgress != gitops.OpNone {
-		parts = append(parts, errStyle.Render("["+string(s.InProgress)+"]"))
+		parts = append(parts, m.styles.err.Render("["+string(s.InProgress)+"]"))
 	}
-	base := mutedStyle.Render("clean")
+	base := m.styles.muted.Render("clean")
 	if len(parts) > 0 {
 		base = strings.Join(parts, " ")
 	}
 	if prCount > 0 {
-		base += " " + prStyle.Render(fmt.Sprintf("[%d PR]", prCount))
+		base += " " + m.styles.pr.Render(fmt.Sprintf("[%d PR]", prCount))
 	}
 	return base
 }
 
-func renderLocalState(it *localItem, remoteMap map[string]*remoteItem) string {
+func (m model) renderLocalState(it *localItem, remoteMap map[string]*remoteItem) string {
 	if it.Message != "" {
-		return okStyle.Render(it.Message)
+		return m.styles.ok.Render(it.Message)
 	}
 	if len(remoteMap) > 0 {
 		if r, ok := remoteMap[it.Name]; ok {
 			if r.Repo.Disabled {
-				return mutedStyle.Render("archived upstream")
+				return m.styles.muted.Render("archived upstream")
 			}
 		} else if !strings.HasSuffix(it.Name, ".wiki") {
-			return errStyle.Render("not in ADO")
+			return m.styles.err.Render("not in ADO")
 		}
 	}
-	return renderState(it.Status)
+	return m.renderState(it.Status)
 }
 
-func renderState(s gitops.Status) string {
+func (m model) renderState(s gitops.Status) string {
 	if s.InProgress != gitops.OpNone {
-		return errStyle.Render(strings.ToLower(string(s.InProgress)))
+		return m.styles.err.Render(strings.ToLower(string(s.InProgress)))
 	}
 	switch {
 	case s.CanFF:
-		return okStyle.Render("ff-ready")
+		return m.styles.ok.Render("ff-ready")
 	case !s.BranchIsDefault && s.MergedInDefault && !s.Dirty():
-		return okStyle.Render("merged → switch & ff")
+		return m.styles.ok.Render("merged → switch & ff")
 	case !s.BranchIsDefault && s.MergedInDefault:
-		return warnStyle.Render("merged (dirty)")
+		return m.styles.warn.Render("merged (dirty)")
 	case s.Ahead == 0 && s.Behind == 0:
-		return okStyle.Render("up-to-date")
+		return m.styles.ok.Render("up-to-date")
 	case s.Ahead > 0 && s.Behind > 0:
-		return warnStyle.Render("diverged")
+		return m.styles.warn.Render("diverged")
 	case s.Ahead > 0:
-		return warnStyle.Render("ahead")
+		return m.styles.warn.Render("ahead")
 	case s.Behind > 0 && !s.BranchIsDefault:
-		return mutedStyle.Render("behind (other branch)")
+		return m.styles.muted.Render("behind (other branch)")
 	case s.Behind > 0 && s.Dirty():
-		return warnStyle.Render("behind (dirty)")
+		return m.styles.warn.Render("behind (dirty)")
 	default:
-		return mutedStyle.Render("-")
+		return m.styles.muted.Render("-")
 	}
 }

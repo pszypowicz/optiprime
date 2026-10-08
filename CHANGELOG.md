@@ -4,6 +4,22 @@ Notable changes to this project. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-10-08
+
+### Fixed
+
+- Inside tmux, the tool used the dark palette on a light terminal. The zebra
+  rows then showed dark text on a near-black background. The tool now asks
+  the terminal for its background color, and tmux 3.4 and later answer.
+- The zebra rows, the cursor row, and the details panel set their own text
+  color. If a terminal does not report its background, the text stays
+  readable.
+
+### Changed
+
+- The TUI uses Bubble Tea v2 and Lip Gloss v2. A build from source needs
+  Go 1.26 or later.
+
 ## [0.3.0] - 2026-08-20
 
 ### Changed
@@ -42,6 +58,7 @@ Initial release: a terminal UI that keeps a directory of Azure DevOps repos
 in sync. Parallel fetch, batch fast-forward updates, and SSH clone of repos
 that are missing locally.
 
+[0.4.0]: https://github.com/pszypowicz/optiprime/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pszypowicz/optiprime/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pszypowicz/optiprime/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pszypowicz/optiprime/releases/tag/v0.1.0

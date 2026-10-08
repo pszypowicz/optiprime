@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/pszypowicz/optiprime/internal/ado"
 	"github.com/pszypowicz/optiprime/internal/gitops"
 	"github.com/pszypowicz/optiprime/internal/scanner"
