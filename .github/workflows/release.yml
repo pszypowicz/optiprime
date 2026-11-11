@@ -5,12 +5,18 @@ on:
     tags:
       - 'v*'
 
-permissions:
-  contents: write
+permissions: {}
 
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    # The release environment holds the homebrew-tap App key and accepts
+    # only v* tags, so no other workflow or ref can read the key.
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -43,15 +49,21 @@ jobs:
           APP_SLUG: ${{ steps.tap-token.outputs.app-slug }}
         run: echo "id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
 
-      # The cask config needs v2.20 or later: install_steps hooks (v2.19) and
-      # the zap stanza that current Homebrew expects (v2.20).
+      # An exact GoReleaser version, so a new release of it never runs here
+      # untested. The cask config needs v2.20 or later.
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser
-          version: "~> v2.20"
+          version: v2.20.1
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ steps.tap-token.outputs.token }}
           HOMEBREW_TAP_BOT_NAME: ${{ steps.tap-token.outputs.app-slug }}[bot]
           HOMEBREW_TAP_BOT_EMAIL: ${{ steps.tap-bot.outputs.id }}+${{ steps.tap-token.outputs.app-slug }}[bot]@users.noreply.github.com
+
+      # Signs a build provenance attestation for every archive listed in
+      # checksums.txt. Check one with `gh attestation verify`.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: ./dist/checksums.txt

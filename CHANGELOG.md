@@ -6,6 +6,12 @@ Notable changes to this project. The format follows
 
 ## [0.5.1] - 2026-11-11
 
+### Added
+
+- Every release archive comes with a build provenance attestation.
+  `gh attestation verify <archive> -R pszypowicz/optiprime` checks that the
+  archive was built by this repository's release workflow.
+
 ### Changed
 
 - Homebrew installs come from the `optiprime` cask in `pszypowicz/tap`,

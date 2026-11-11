@@ -2,9 +2,11 @@ version: 2
 
 project_name: optiprime
 
+# Fails the release when go.mod or go.sum is not tidy, instead of tidying
+# them on the runner.
 before:
   hooks:
-    - go mod tidy
+    - go mod tidy -diff
 
 builds:
   - id: optiprime
