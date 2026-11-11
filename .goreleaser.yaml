@@ -38,3 +38,33 @@ changelog:
 release:
   draft: false
   prerelease: auto
+
+# Each release opens a pull request in the tap that updates the cask. The
+# token comes from a GitHub App that can write only to homebrew-tap, minted
+# by the release workflow.
+homebrew_casks:
+  - name: optiprime
+    homepage: https://github.com/pszypowicz/optiprime
+    description: Terminal UI for keeping a directory of Azure DevOps repositories in sync
+    commit_msg_template: "Update {{ .ProjectName }} to {{ .Version }}"
+    commit_author:
+      name: "{{ .Env.HOMEBREW_TAP_BOT_NAME }}"
+      email: "{{ .Env.HOMEBREW_TAP_BOT_EMAIL }}"
+      # GitHub signs the commits as the App, so they show as verified.
+      use_github_app_token: true
+    # Prerelease tags leave the tap alone.
+    skip_upload: auto
+    # The binary is not notarized, so Gatekeeper would refuse to run it with
+    # the quarantine flag that a cask download sets.
+    hooks:
+      post:
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/optiprime"]
+          end
+    repository:
+      owner: pszypowicz
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+      pull_request:
+        enabled: true

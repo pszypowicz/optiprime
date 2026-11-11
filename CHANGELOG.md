@@ -4,6 +4,15 @@ Notable changes to this project. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] - 2026-11-11
+
+### Changed
+
+- Homebrew installs come from the `optiprime` cask in `pszypowicz/tap`,
+  which each release now updates. On the next `brew update`, Homebrew moves
+  an installed `optiprime` formula to the cask, or prints the commands that
+  do it.
+
 ## [0.5.0] - 2026-11-11
 
 ### Added
@@ -77,6 +86,7 @@ Initial release: a terminal UI that keeps a directory of Azure DevOps repos
 in sync. Parallel fetch, batch fast-forward updates, and SSH clone of repos
 that are missing locally.
 
+[0.5.1]: https://github.com/pszypowicz/optiprime/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/pszypowicz/optiprime/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/pszypowicz/optiprime/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pszypowicz/optiprime/compare/v0.2.0...v0.3.0
