@@ -13,8 +13,13 @@ import (
 const chromeLines = 9
 
 // remoteOffNotice explains the degraded git-only mode. Shown in the header
-// and flashed when the Remote tab is requested without a PAT.
-const remoteOffNotice = "remote features off - AZURE_DEVOPS_EXT_PAT not set"
+// and flashed when the Remote tab is requested without a credential.
+func (m model) remoteOffNotice() string {
+	if m.remoteOff == "" {
+		return "remote features off"
+	}
+	return "remote features off - " + m.remoteOff
+}
 
 func (m model) View() tea.View {
 	v := tea.NewView(m.render())
@@ -81,7 +86,7 @@ func (m model) renderHeader() string {
 
 	extras := []string{}
 	if !m.remoteEnabled() {
-		extras = append(extras, m.styles.muted.Render(remoteOffNotice))
+		extras = append(extras, m.styles.muted.Render(m.remoteOffNotice()))
 	}
 	if m.flash != "" {
 		extras = append(extras, m.styles.muted.Render(m.flash))

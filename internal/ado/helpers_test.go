@@ -13,7 +13,7 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) (*Client, *httptest.S
 	c := &Client{
 		baseURL:    srv.URL,
 		project:    "proj",
-		pat:        "tok",
+		cred:       NewEnvCredential("AZURE_DEVOPS_EXT_PAT", "tok"),
 		httpClient: srv.Client(),
 	}
 	return c, srv

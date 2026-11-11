@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/pszypowicz/optiprime/internal/ado"
+	"github.com/pszypowicz/optiprime/internal/applog"
 	"github.com/pszypowicz/optiprime/internal/gitops"
 )
 
@@ -65,6 +68,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.reconcileRemotes()
 		return m, nil
+
+	case authCheckedMsg:
+		switch {
+		case msg.err == nil:
+			return m, tea.Batch(listRemotesCmd(m.adoClient), fetchPRsCmd(m.adoClient))
+		case errors.Is(msg.err, ado.ErrAzUnavailable):
+			// az login was only a fallback, so its absence is git-only
+			// mode, the same as running without a PAT.
+			applog.Infof("auth", "", "remote features off: %v", msg.err)
+			m.adoClient = nil
+			m.remoteOff = msg.err.Error()
+			m.tab = tabLocal
+		default:
+			m.remoteListErr = msg.err.Error()
+			m.prErr = msg.err.Error()
+		}
+		m.loadingRemotes = false
+		m.loadingPRs = false
+		return m, m.startFetchesIfReady()
 
 	case prCountsMsg:
 		m.loadingPRs = false
@@ -152,7 +174,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loadingPRs = true
 			m.remoteListErr = ""
 			m.prErr = ""
-			cmds = append(cmds, listRemotesCmd(m.adoClient), fetchPRsCmd(m.adoClient))
+			cmds = append(cmds, checkAuthCmd(m.adoClient))
 		}
 		return m, tea.Batch(cmds...)
 

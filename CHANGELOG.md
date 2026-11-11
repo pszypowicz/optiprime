@@ -4,6 +4,25 @@ Notable changes to this project. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-11-11
+
+### Added
+
+- Without a PAT, the tool uses your `az login` session for the Remote tab
+  and the PR counts. It mints an Azure DevOps token for the Entra tenant
+  that backs the org, which can differ from the tenant of your
+  subscriptions, and renews the token before it expires. Without `az`, or
+  without a login, the tool stays in git-only mode.
+- `ADO_TOKEN` takes an Entra access token, and `ADO_TENANT_ID` names the
+  tenant of the org to skip the lookup.
+- An Entra access token in `AZURE_DEVOPS_EXT_PAT` is sent as a bearer token.
+
+### Changed
+
+- The git-only notice in the header says why the remote features are off.
+- Dependencies are updated, including Bubble Tea 2.1 and Lip Gloss 2.1. A
+  build from source needs Go 1.26.7 or later.
+
 ## [0.4.0] - 2026-10-08
 
 ### Fixed
@@ -58,6 +77,7 @@ Initial release: a terminal UI that keeps a directory of Azure DevOps repos
 in sync. Parallel fetch, batch fast-forward updates, and SSH clone of repos
 that are missing locally.
 
+[0.5.0]: https://github.com/pszypowicz/optiprime/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/pszypowicz/optiprime/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pszypowicz/optiprime/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pszypowicz/optiprime/compare/v0.1.0...v0.2.0

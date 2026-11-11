@@ -21,21 +21,12 @@ func TestNewClient_OrgNormalization(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			c := NewClient(tc.org, "proj", "pat")
+			cred := NewEnvCredential("AZURE_DEVOPS_EXT_PAT", "pat")
+			c := NewClient(tc.org, "proj", cred)
 			assert.Equal(t, tc.wantURL, c.baseURL)
 			assert.Equal(t, "proj", c.project)
-			assert.Equal(t, "pat", c.pat)
+			assert.Equal(t, cred, c.cred)
 			assert.NotNil(t, c.httpClient)
 		})
 	}
-}
-
-func TestAuthHeader(t *testing.T) {
-	// base64(":abc123") = "OmFiYzEyMw=="
-	c := &Client{pat: "abc123"}
-	assert.Equal(t, "Basic OmFiYzEyMw==", c.authHeader())
-
-	// base64(":") = "Og=="
-	cEmpty := &Client{pat: ""}
-	assert.Equal(t, "Basic Og==", cEmpty.authHeader())
 }

@@ -59,6 +59,17 @@ func statusOnlyCmd(sem chan struct{}, name, path string) tea.Cmd {
 	}
 }
 
+// checkAuthCmd obtains the credential before the REST calls start, so a
+// missing az login turns the remote features off instead of failing each
+// call.
+func checkAuthCmd(c *ado.Client) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		return authCheckedMsg{err: c.CheckAuth(ctx)}
+	}
+}
+
 func listRemotesCmd(c *ado.Client) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

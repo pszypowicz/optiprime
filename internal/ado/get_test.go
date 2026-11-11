@@ -2,10 +2,13 @@ package ado
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -145,4 +148,129 @@ func TestGet_TransportError(t *testing.T) {
 	err := c.get(context.Background(), "/x", nil, &out)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ado request")
+}
+
+// azClient wires a Client to srv with an az credential whose tenant is
+// fixed, so the only HTTP traffic is the request under test.
+func azClient(t *testing.T, srv *httptest.Server) (*Client, *fakeAz) {
+	t.Helper()
+	cred, fake := newTestAz(t, srv.URL, orgTenant)
+	c := NewClient(srv.URL, "proj", cred)
+	c.httpClient = srv.Client()
+	return c, fake
+}
+
+func TestGet_RejectedAzTokenIsRenewedOnce(t *testing.T) {
+	stale := fakeJWT(time.Now().Add(time.Hour).Unix(), "stale")
+	fresh := fakeJWT(time.Now().Add(time.Hour).Unix(), "fresh")
+	var seen []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.Header.Get("Authorization"))
+		if r.Header.Get("Authorization") == "Bearer "+stale {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte(`{"value":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+	c, fake := azClient(t, srv)
+	fake.queue(azResult{stdout: stale}, azResult{stdout: fresh})
+
+	var out emptyPayload
+	require.NoError(t, c.get(context.Background(), "/x", nil, &out))
+	assert.Equal(t, []string{"Bearer " + stale, "Bearer " + fresh}, seen)
+}
+
+func TestGet_SameAzTokenAfterRenewIsNotRetried(t *testing.T) {
+	tok := fakeJWT(time.Now().Add(time.Hour).Unix(), "a")
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(srv.Close)
+	c, fake := azClient(t, srv)
+	fake.queue(azResult{stdout: tok}, azResult{stdout: tok})
+
+	var out emptyPayload
+	err := c.get(context.Background(), "/x", nil, &out)
+	require.Error(t, err)
+	assert.Equal(t, 1, hits)
+	assert.Contains(t, err.Error(), "ado auth failed (401)")
+	assert.Contains(t, err.Error(), "az login")
+}
+
+func TestGet_EnvCredentialIsNotRetried(t *testing.T) {
+	hits := 0
+	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+
+	var out emptyPayload
+	require.Error(t, c.get(context.Background(), "/x", nil, &out))
+	assert.Equal(t, 1, hits)
+}
+
+func TestGet_AuthErrorNamesTheSource(t *testing.T) {
+	cases := []struct {
+		name string
+		cred Credential
+		want string
+	}{
+		{"pat", NewEnvCredential("AZURE_DEVOPS_EXT_PAT", "tok"), "AZURE_DEVOPS_EXT_PAT"},
+		{"ado token", NewEnvCredential("ADO_TOKEN", fakeJWT(0, "a")), "ADO_TOKEN"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusUnauthorized)
+			})
+			c.cred = tc.cred
+
+			var out emptyPayload
+			err := c.get(context.Background(), "/x", nil, &out)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.want)
+		})
+	}
+}
+
+func TestGet_CredentialErrorIsReturned(t *testing.T) {
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits++ }))
+	t.Cleanup(srv.Close)
+	c, fake := azClient(t, srv)
+	fake.queue(azResult{stderr: "ERROR: Please run 'az login' to setup account.", err: errors.New("exit status 1")})
+
+	var out emptyPayload
+	err := c.get(context.Background(), "/x", nil, &out)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrAzUnavailable))
+	assert.Zero(t, hits, "no request goes out without a credential")
+}
+
+func TestGet_UnknownIdentity(t *testing.T) {
+	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"message":"VS800075: The identity has not been materialized"}`))
+	})
+
+	var out emptyPayload
+	err := c.get(context.Background(), "/x", nil, &out)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "has not been materialized")
+	assert.Contains(t, err.Error(), "ADO_TENANT_ID")
+}
+
+func TestCheckAuth(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("CheckAuth must not call the REST API")
+	}))
+	t.Cleanup(srv.Close)
+	c, fake := azClient(t, srv)
+	fake.queue(azResult{stdout: fakeJWT(0, "a")})
+
+	require.NoError(t, c.CheckAuth(context.Background()))
+	assert.Equal(t, 1, fake.callCount())
 }

@@ -38,6 +38,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "optiprime: could not open log at %s: %v\n", logPath, err)
 	}
 	applog.Infof("start", "", "optiprime started; log path=%s", applog.Path())
+	if cfg.RemoteEnabled() {
+		applog.Infof("start", "", "ado auth=%s org=%s project=%s", cfg.AuthSource, cfg.Org, cfg.Project)
+	} else {
+		applog.Infof("start", "", "remote features off: %s", cfg.RemoteOff)
+	}
 
 	if err := tui.Run(cfg); err != nil {
 		applog.Errorf("tui", "", "run failed: %v", err)
