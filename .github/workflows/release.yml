@@ -24,10 +24,34 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      # A token for the GitHub App that may write only to homebrew-tap.
+      # GoReleaser uses it to open the pull request that updates the cask.
+      - id: tap-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.HOMEBREW_TAP_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HOMEBREW_TAP_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: homebrew-tap
+          permission-contents: write
+          permission-pull-requests: write
+
+      # The App's bot user id forms the noreply address of the cask commits.
+      - id: tap-bot
+        env:
+          GH_TOKEN: ${{ steps.tap-token.outputs.token }}
+          APP_SLUG: ${{ steps.tap-token.outputs.app-slug }}
+        run: echo "id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+
+      # The cask config needs v2.20 or later: install_steps hooks (v2.19) and
+      # the zap stanza that current Homebrew expects (v2.20).
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser
-          version: "~> v2"
+          version: "~> v2.20"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ steps.tap-token.outputs.token }}
+          HOMEBREW_TAP_BOT_NAME: ${{ steps.tap-token.outputs.app-slug }}[bot]
+          HOMEBREW_TAP_BOT_EMAIL: ${{ steps.tap-bot.outputs.id }}+${{ steps.tap-token.outputs.app-slug }}[bot]@users.noreply.github.com

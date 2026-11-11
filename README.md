@@ -84,6 +84,17 @@ Config-file support is not wired up yet - env is the only source.
 
 ## Install
 
+With Homebrew, on macOS or Linux:
+
+```sh
+brew install --cask pszypowicz/tap/optiprime
+```
+
+The binary is not notarized, so the cask removes the macOS quarantine flag
+after install. Without that step, macOS would refuse to run it.
+
+With Go:
+
 ```sh
 go install github.com/pszypowicz/optiprime@latest
 ```
