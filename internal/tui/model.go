@@ -52,6 +52,7 @@ type model struct {
 	scanErr        string
 	remoteListErr  string
 	prErr          string
+	remoteOff      string // why the remote features are off
 	prCounts       map[string]int
 	loadingLocals  bool
 	loadingRemotes bool
@@ -80,10 +81,11 @@ func newModel(cfg *config.Config) model {
 		// terminal that never answers keeps the dark palette.
 		styles: newStyles(true),
 	}
-	// Without a PAT the REST features (Remote tab, PR counts) are off and
-	// their loading flags must stay false - nothing will ever clear them.
+	// Without a credential the REST features (Remote tab, PR counts) are off
+	// and their loading flags must stay false - nothing will ever clear them.
+	m.remoteOff = cfg.RemoteOff
 	if cfg.RemoteEnabled() {
-		m.adoClient = ado.NewClient(cfg.Org, cfg.Project, cfg.PAT)
+		m.adoClient = ado.NewClient(cfg.Org, cfg.Project, cfg.Credential)
 		m.loadingRemotes = true
 		m.loadingPRs = true
 	}
@@ -101,7 +103,7 @@ func (m model) Init() tea.Cmd {
 		scanLocalsCmd(m.cfg.ScopeRoot),
 	}
 	if m.remoteEnabled() {
-		cmds = append(cmds, listRemotesCmd(m.adoClient), fetchPRsCmd(m.adoClient))
+		cmds = append(cmds, checkAuthCmd(m.adoClient))
 	}
 	return tea.Batch(cmds...)
 }

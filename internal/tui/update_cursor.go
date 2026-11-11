@@ -14,7 +14,7 @@ func (m *model) toggleTab() {
 		return
 	}
 	if !m.remoteEnabled() {
-		m.flash = remoteOffNotice
+		m.flash = m.remoteOffNotice()
 		return
 	}
 	m.tab = tabRemote

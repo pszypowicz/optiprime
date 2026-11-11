@@ -16,6 +16,11 @@ type statusMsg struct {
 	err    error
 }
 
+// authCheckedMsg reports whether the ADO credential could be obtained.
+type authCheckedMsg struct {
+	err error
+}
+
 type remoteListedMsg struct {
 	repos []ado.Repo
 	err   error

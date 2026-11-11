@@ -1,27 +1,33 @@
 package tui
 
 import (
+	"errors"
+	"fmt"
 	"image/color"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/pszypowicz/optiprime/internal/ado"
 	"github.com/pszypowicz/optiprime/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+const offReason = "set AZURE_DEVOPS_EXT_PAT or run az login"
+
 func gitOnlyModel() model {
-	return newModel(&config.Config{ScopeRoot: "/scope"})
+	return newModel(&config.Config{ScopeRoot: "/scope", RemoteOff: offReason})
 }
 
 func remoteModel() model {
 	return newModel(&config.Config{
-		Org: "foo-org", Project: "bar-project", PAT: "pat-xyz", ScopeRoot: "/scope",
+		Org: "foo-org", Project: "bar-project", ScopeRoot: "/scope",
+		Credential: ado.NewEnvCredential("AZURE_DEVOPS_EXT_PAT", "pat-xyz"),
 	})
 }
 
-func TestNewModel_NoPAT_RemoteFeaturesOff(t *testing.T) {
+func TestNewModel_NoCredential_RemoteFeaturesOff(t *testing.T) {
 	m := gitOnlyModel()
 
 	assert.False(t, m.remoteEnabled())
@@ -29,7 +35,7 @@ func TestNewModel_NoPAT_RemoteFeaturesOff(t *testing.T) {
 	assert.False(t, m.loadingPRs, "nothing will ever load PR counts")
 }
 
-func TestNewModel_WithPAT_RemoteFeaturesOn(t *testing.T) {
+func TestNewModel_WithCredential_RemoteFeaturesOn(t *testing.T) {
 	m := remoteModel()
 
 	assert.True(t, m.remoteEnabled())
@@ -65,7 +71,7 @@ func TestTabKey_BlockedWhenRemoteOff(t *testing.T) {
 	require.True(t, ok)
 
 	assert.Equal(t, tabLocal, got.tab)
-	assert.Contains(t, got.flash, "AZURE_DEVOPS_EXT_PAT")
+	assert.Contains(t, got.flash, offReason)
 }
 
 func TestTabClick_BlockedWhenRemoteOff(t *testing.T) {
@@ -74,7 +80,7 @@ func TestTabClick_BlockedWhenRemoteOff(t *testing.T) {
 	m.handleClick(5, 2)
 
 	assert.Equal(t, tabLocal, m.tab)
-	assert.Contains(t, m.flash, "AZURE_DEVOPS_EXT_PAT")
+	assert.Contains(t, m.flash, offReason)
 }
 
 func TestRenderTabs_OffLabelWhenRemoteOff(t *testing.T) {
@@ -89,7 +95,7 @@ func TestRenderHeader_RemoteOff(t *testing.T) {
 	m.height = 50
 
 	head := m.renderHeader()
-	assert.Contains(t, head, "AZURE_DEVOPS_EXT_PAT not set")
+	assert.Contains(t, head, "remote features off - "+offReason)
 	assert.Contains(t, head, "/scope")
 	assert.NotContains(t, head, " / ", "no empty org/project placeholder")
 }
@@ -101,7 +107,7 @@ func TestRenderHeader_RemoteOn(t *testing.T) {
 
 	head := m.renderHeader()
 	assert.Contains(t, head, "foo-org / bar-project")
-	assert.NotContains(t, head, "AZURE_DEVOPS_EXT_PAT")
+	assert.NotContains(t, head, "remote features off")
 }
 
 func TestRenderFooter_NoRemoteKeyWhenRemoteOff(t *testing.T) {
@@ -118,6 +124,60 @@ func TestRenderLocal_NoOrphanStateWhenRemoteOff(t *testing.T) {
 
 	state := m.renderLocalState(it, m.remoteByName())
 	assert.NotContains(t, state, "not in ADO")
+}
+
+func updated(t *testing.T, m model, msg tea.Msg) (model, tea.Cmd) {
+	t.Helper()
+	next, cmd := m.Update(msg)
+	got, ok := next.(model)
+	require.True(t, ok)
+	return got, cmd
+}
+
+func TestAuthChecked_OK_StartsRemoteCalls(t *testing.T) {
+	m := remoteModel()
+
+	got, cmd := updated(t, m, authCheckedMsg{})
+
+	assert.True(t, got.remoteEnabled())
+	assert.True(t, got.loadingRemotes)
+	assert.True(t, got.loadingPRs)
+	assert.NotNil(t, cmd)
+}
+
+// No az login is the same as no PAT: git-only mode, not an error.
+func TestAuthChecked_AzUnavailable_SwitchesToGitOnly(t *testing.T) {
+	m := remoteModel()
+	m.loadingLocals = false
+	m.locals = []*localItem{{Name: "repo", Path: "/scope/repo", Loading: true}}
+	err := fmt.Errorf("%w - run 'az login' or set AZURE_DEVOPS_EXT_PAT", ado.ErrAzUnavailable)
+
+	got, cmd := updated(t, m, authCheckedMsg{err: err})
+
+	assert.False(t, got.remoteEnabled())
+	assert.False(t, got.loadingRemotes)
+	assert.False(t, got.loadingPRs)
+	assert.Empty(t, got.remoteListErr)
+	assert.Empty(t, got.prErr)
+	assert.True(t, got.fetchesStarted, "locals no longer wait on the remote list")
+	assert.NotNil(t, cmd)
+	got.width, got.height = 300, 50
+	assert.Contains(t, got.renderHeader(), "remote features off - az login is not available")
+	assert.Contains(t, got.renderTabs(), "Remote (off)")
+}
+
+func TestAuthChecked_OtherError_ShownAsRemoteError(t *testing.T) {
+	m := remoteModel()
+	m.loadingLocals = false
+
+	got, _ := updated(t, m, authCheckedMsg{err: errors.New("the tenant behind x requires an interactive sign-in")})
+
+	assert.True(t, got.remoteEnabled(), "the user can see the fix on the Remote tab")
+	assert.False(t, got.loadingRemotes)
+	assert.False(t, got.loadingPRs)
+	assert.Contains(t, got.remoteListErr, "interactive sign-in")
+	assert.Contains(t, got.prErr, "interactive sign-in")
+	assert.True(t, got.fetchesStarted)
 }
 
 func TestNewModel_DarkPaletteUntilBackgroundKnown(t *testing.T) {
