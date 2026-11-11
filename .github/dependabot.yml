@@ -1,6 +1,7 @@
-# Opens one pull request a week that moves the pinned action SHAs in
-# .github/workflows, and their version comments, to the latest releases.
-# A release is proposed only after it has been public for a week.
+# Opens one pull request a week per ecosystem. For actions it moves the
+# pinned SHAs in .github/workflows, and their version comments, to the
+# latest releases. For Go it updates go.mod and go.sum. A release is
+# proposed only after it has been public for a week.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -11,4 +12,14 @@ updates:
       default-days: 7
     groups:
       actions:
+        patterns: ["*"]
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      go:
         patterns: ["*"]

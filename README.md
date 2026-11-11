@@ -93,6 +93,14 @@ brew install --cask pszypowicz/tap/optiprime
 The binary is not notarized, so the cask removes the macOS quarantine flag
 after install. Without that step, macOS would refuse to run it.
 
+From the [releases](https://github.com/pszypowicz/optiprime/releases), each
+archive has a build provenance attestation. To check that an archive was
+built by this repository's release workflow:
+
+```sh
+gh attestation verify optiprime_<version>_<os>_<arch>.tar.gz -R pszypowicz/optiprime
+```
+
 With Go:
 
 ```sh
